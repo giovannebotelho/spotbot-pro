@@ -183,8 +183,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 status(f"🔍 [FUTUROS] Analisando {symbol}...")
                 
                 try:
-                    # Setup alavancagem 30x Isolada
-                    if not await setup_futures_margin(client, symbol, leverage=30, margin_type='ISOLATED'):
+                    # Setup alavancagem 20x Isolada
+                    if not await setup_futures_margin(client, symbol, leverage=20, margin_type='ISOLATED'):
                         continue
                     
                     # Fetch Klines 15m
@@ -228,6 +228,10 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 vol_sma = pd.Series(volumes_rec).rolling(10).mean().tolist()[-1] if len(volumes_rec) >= 10 else 0
                 cur_vol = volumes_rec[-1]
                 has_volume_spike = (cur_vol > (vol_sma * 1.5)) if vol_sma > 0 else True
+                
+                # Análise de Distância da EMA20
+                ema20_val = pd.Series(closes).ewm(span=20, adjust=False).mean().iloc[-1]
+                ema_dist_pct = ((cur_price - ema20_val) / ema20_val) * 100
                 
                 direction = None
                 trigger_reason = ""
@@ -302,6 +306,14 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         log(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.")
                         direction = None
                         
+                    elif direction == 'LONG' and ema_dist_pct < 0.5 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
+                        log(f"🛡️ [EMA DIST] Bloqueando LONG em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%).")
+                        direction = None
+                        
+                    elif direction == 'SHORT' and ema_dist_pct > -0.5 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
+                        log(f"🛡️ [EMA DIST] Bloqueando SHORT em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%).")
+                        direction = None
+                        
                     elif direction == 'LONG' and btc_trend == 'BEAR' and symbol != 'BTCUSDT':
                         log(f"🛡️ [REGIME] Bloqueando LONG em {symbol} pois o BTC está em tendência de BAIXA (RSI: {btc_rsi:.1f}).")
                         direction = None
@@ -325,7 +337,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     log(f"🚨 [FUTUROS] Oportunidade {direction} detectada em {symbol} (RSI: {rsi:.1f})")
                     log(f"💡 Gatilho: {trigger_reason}")
                         
-                    initial_leverage = 30
+                    initial_leverage = 20
                     
                     # 2. Definição do TP/SL (Dinâmico)
                     if '[BAND-SNIPER 15M]' in trigger_reason:
@@ -342,8 +354,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             roi_tp = 1.0025 if direction == 'LONG' else 0.9975
                             roi_sl = 0.9975 if direction == 'LONG' else 1.0025 # SL super curto para notícia
                         else:
-                            roi_tp = 1.0025 if direction == 'LONG' else 0.9975
-                            roi_sl = 0.9950 if direction == 'LONG' else 1.0050
+                            roi_tp = 1.0060 if direction == 'LONG' else 0.9940
+                            roi_sl = 0.9850 if direction == 'LONG' else 1.0150
                             
                         tp_price = cur_price * roi_tp
                         sl_price = cur_price * roi_sl

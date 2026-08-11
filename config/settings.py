@@ -131,7 +131,7 @@ OCO_CONFIG = {
 }
 
 OCO_ORDER_CONFIG = {
-    'lucro_alvo_percent': 2.5,
+    'lucro_alvo_percent': 2.0,
     'stop_loss_percent': 2.0,
 }
 
