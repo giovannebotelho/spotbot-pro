@@ -140,9 +140,16 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 await asyncio.sleep(300)
                 continue
                 
+            try:
+                account_info = await client.futures_account()
+                binance_open_positions = [p['symbol'] for p in account_info.get('positions', []) if float(p.get('positionAmt', 0)) != 0]
+            except Exception as e:
+                log(f"⚠️ Erro ao checar posições abertas na Binance: {e}")
+                binance_open_positions = []
+                
             for symbol in symbols_to_scan:
                 active_positions = await futures_state.get_all()
-                if symbol in active_positions:
+                if symbol in active_positions or symbol in binance_open_positions:
                     continue
                     
                 active_positions = await futures_state.get_all()
@@ -282,10 +289,10 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         sl_price = bot_futures_status_data.pop('sniper_sl')
                     else:
                         if '[GEMINI-AI]' in trigger_reason:
-                            roi_tp = 1.0025 if direction == 'LONG' else 0.9975
+                            roi_tp = 1.0040 if direction == 'LONG' else 0.9960
                             roi_sl = 0.9975 if direction == 'LONG' else 1.0025 # SL super curto para notícia
                         else:
-                            roi_tp = 1.0025 if direction == 'LONG' else 0.9975
+                            roi_tp = 1.0040 if direction == 'LONG' else 0.9960
                             roi_sl = 0.9950 if direction == 'LONG' else 1.0050
                             
                         tp_price = cur_price * roi_tp
