@@ -183,10 +183,6 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 status(f"🔍 [FUTUROS] Analisando {symbol}...")
                 
                 try:
-                    # Setup alavancagem 20x Isolada
-                    if not await setup_futures_margin(client, symbol, leverage=20, margin_type='ISOLATED'):
-                        continue
-                    
                     # Fetch Klines 15m
                     interval = '15m' # Alterado de TRADING_CONFIG['interval'] para focar em 15m scalping
                     klines = await get_futures_klines(client, symbol, interval=interval, limit=100)
@@ -396,6 +392,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         continue
                     
                     try:
+                        # Setup alavancagem Isolada SOMENTE quando for entrar no trade (economia de API Rate Limit)
+                        if not await setup_futures_margin(client, symbol, leverage=leverage, margin_type='ISOLATED'):
+                            log(f"⚠️ Falha ao configurar margem/alavancagem em {symbol}. Cancelando entrada.")
+                            continue
+
                         from core.futures_order_manager import place_futures_trade_with_protection
                         side_entry = 'BUY' if direction == 'LONG' else 'SELL'
                         
