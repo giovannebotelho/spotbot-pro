@@ -235,16 +235,18 @@ def calculate_orderbook_imbalance(order_book):
 def is_hammer(candle):
     o, h, l, c = float(candle[1]), float(candle[2]), float(candle[3]), float(candle[4])
     body = abs(c - o)
+    if body == 0: return False # Exige algum corpo para não ser confundido com Doji
     lower_wick = min(o, c) - l
     upper_wick = h - max(o, c)
-    return lower_wick >= 2 * body and upper_wick <= body
+    return lower_wick >= 2 * body and upper_wick <= body * 0.5
 
 def is_shooting_star(candle):
     o, h, l, c = float(candle[1]), float(candle[2]), float(candle[3]), float(candle[4])
     body = abs(c - o)
+    if body == 0: return False
     upper_wick = h - max(o, c)
     lower_wick = min(o, c) - l
-    return upper_wick >= 2 * body and lower_wick <= body
+    return upper_wick >= 2 * body and lower_wick <= body * 0.5
 
 def is_bullish_engulfing(prev_c, curr_c):
     po, pc = float(prev_c[1]), float(prev_c[4])
@@ -301,13 +303,69 @@ def is_bullish_and_bearish_strike(prev_c, curr_c):
     return is_bullish_engulfing(prev_c, curr_c) or is_kicker_bullish(prev_c, curr_c)
 
 def is_rising_three_methods(c1, c2, c3, c4, c5):
-    return float(c1[4]) > float(c1[1]) and float(c5[4]) > float(c5[1]) and float(c5[4]) > float(c1[4])
+    c1o, c1h, c1l, c1c = float(c1[1]), float(c1[2]), float(c1[3]), float(c1[4])
+    c5o, c5c = float(c5[1]), float(c5[4])
+    if not (c1c > c1o and c5c > c5o and c5c > c1c): return False
+    for c in [c2, c3, c4]:
+        h, l = float(c[2]), float(c[3])
+        if h > c1h or l < c1l: return False
+    return True
 
 def is_falling_three_methods(c1, c2, c3, c4, c5):
-    return float(c1[4]) < float(c1[1]) and float(c5[4]) < float(c5[1]) and float(c5[4]) < float(c1[4])
+    c1o, c1h, c1l, c1c = float(c1[1]), float(c1[2]), float(c1[3]), float(c1[4])
+    c5o, c5c = float(c5[1]), float(c5[4])
+    if not (c1c < c1o and c5c < c5o and c5c < c1c): return False
+    for c in [c2, c3, c4]:
+        h, l = float(c[2]), float(c[3])
+        if h > c1h or l < c1l: return False
+    return True
 
 def is_stick_sandwich(c1, c2, c3):
-    return float(c1[4]) < float(c1[1]) and float(c2[4]) > float(c2[1]) and float(c3[4]) < float(c3[1])
+    c1o, c1c = float(c1[1]), float(c1[4])
+    c2o, c2c = float(c2[1]), float(c2[4])
+    c3o, c3c = float(c3[1]), float(c3[4])
+    if not (c1c < c1o and c2c > c2o and c3c < c3o): return False
+    return abs(c1c - c3c) / c1c < 0.001
+
+def is_morning_star(c1, c2, c3):
+    c1o, c1c = float(c1[1]), float(c1[4])
+    c2o, c2h, c2l, c2c = float(c2[1]), float(c2[2]), float(c2[3]), float(c2[4])
+    c3o, c3c = float(c3[1]), float(c3[4])
+    if not (c1c < c1o and c3c > c3o): return False
+    is_c2_small = abs(c2c - c2o) <= (c2h - c2l) * 0.3
+    mid_c1 = (c1o + c1c) / 2
+    return is_c2_small and c3c > mid_c1
+
+def is_evening_star(c1, c2, c3):
+    c1o, c1c = float(c1[1]), float(c1[4])
+    c2o, c2h, c2l, c2c = float(c2[1]), float(c2[2]), float(c2[3]), float(c2[4])
+    c3o, c3c = float(c3[1]), float(c3[4])
+    if not (c1c > c1o and c3c < c3o): return False
+    is_c2_small = abs(c2c - c2o) <= (c2h - c2l) * 0.3
+    mid_c1 = (c1o + c1c) / 2
+    return is_c2_small and c3c < mid_c1
+
+def is_marubozu_bullish(candle):
+    o, h, l, c = float(candle[1]), float(candle[2]), float(candle[3]), float(candle[4])
+    body = c - o
+    if body <= 0: return False
+    return (h - c) <= body * 0.05 and (o - l) <= body * 0.05
+
+def is_marubozu_bearish(candle):
+    o, h, l, c = float(candle[1]), float(candle[2]), float(candle[3]), float(candle[4])
+    body = o - c
+    if body <= 0: return False
+    return (h - o) <= body * 0.05 and (c - l) <= body * 0.05
+
+def is_tweezer_bottom(c1, c2):
+    c1o, c1c, c1l = float(c1[1]), float(c1[4]), float(c1[3])
+    c2o, c2c, c2l = float(c2[1]), float(c2[4]), float(c2[3])
+    return (c1c < c1o) and (c2c > c2o) and (abs(c1l - c2l) / c1l < 0.001)
+
+def is_tweezer_top(c1, c2):
+    c1o, c1c, c1h = float(c1[1]), float(c1[4]), float(c1[2])
+    c2o, c2c, c2h = float(c2[1]), float(c2[4]), float(c2[2])
+    return (c1c > c1o) and (c2c < c2o) and (abs(c1h - c2h) / c1h < 0.001)
 
 def check_trend(klines):
     closes = extract_closes(klines)
@@ -355,6 +413,12 @@ def check_candle_patterns(klines):
     if is_rising_three_methods(c5, c4, c3, c2, c1): patterns.append("Rising Three Methods")
     if is_falling_three_methods(c5, c4, c3, c2, c1): patterns.append("Falling Three Methods")
     if is_stick_sandwich(c3, c2, c1): patterns.append("Stick Sandwich")
+    if is_morning_star(c3, c2, c1): patterns.append("Morning Star")
+    if is_evening_star(c3, c2, c1): patterns.append("Evening Star")
+    if is_marubozu_bullish(c1): patterns.append("Bullish Marubozu")
+    if is_marubozu_bearish(c1): patterns.append("Bearish Marubozu")
+    if is_tweezer_bottom(c2, c1): patterns.append("Tweezer Bottom")
+    if is_tweezer_top(c2, c1): patterns.append("Tweezer Top")
 
     return patterns
 
