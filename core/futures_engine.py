@@ -147,6 +147,30 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 log(f"⚠️ Erro ao checar posições abertas na Binance: {e}")
                 binance_open_positions = []
                 
+            # --- FILTRO DE REGIME DE MERCADO (BTCUSDT) ---
+            btc_trend = 'NEUTRAL'
+            btc_rsi = 50.0
+            try:
+                btc_klines = await get_futures_klines(client, "BTCUSDT", interval="15m", limit=30)
+                if btc_klines and len(btc_klines) >= 20:
+                    import pandas as pd
+                    btc_closes = [float(k[4]) for k in btc_klines]
+                    from core.indicators import calculate_rsi
+                    btc_rsi = calculate_rsi(btc_closes)
+                    btc_df = pd.DataFrame({'close': btc_closes})
+                    btc_ema20 = btc_df['close'].ewm(span=20, adjust=False).mean().tolist()[-1]
+                    btc_cur = btc_closes[-1]
+                    
+                    if btc_cur < btc_ema20 and btc_rsi < 45:
+                        btc_trend = 'BEAR'
+                    elif btc_cur > btc_ema20 and btc_rsi > 55:
+                        btc_trend = 'BULL'
+                        
+                status(f"🌍 Market Regime (BTC): {btc_trend} (RSI: {btc_rsi:.1f})")
+            except Exception as e:
+                log(f"⚠️ Erro ao analisar BTCUSDT para filtro de mercado: {e}")
+            # ---------------------------------------------
+
             for symbol in symbols_to_scan:
                 active_positions = await futures_state.get_all()
                 if symbol in active_positions or symbol in binance_open_positions:
@@ -159,8 +183,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 status(f"🔍 [FUTUROS] Analisando {symbol}...")
                 
                 try:
-                    # Setup alavancagem 20x Isolada
-                    if not await setup_futures_margin(client, symbol, leverage=20, margin_type='ISOLATED'):
+                    # Setup alavancagem 30x Isolada
+                    if not await setup_futures_margin(client, symbol, leverage=30, margin_type='ISOLATED'):
                         continue
                     
                     # Fetch Klines 15m
@@ -199,6 +223,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 cur_price = closes[-1]
                 cur_open = float(klines[-1][1])
                 rsi = calculate_rsi(closes)
+                
+                # Análise de Volume Relativo (Pico recente)
+                vol_sma = pd.Series(volumes_rec).rolling(10).mean().tolist()[-1] if len(volumes_rec) >= 10 else 0
+                cur_vol = volumes_rec[-1]
+                has_volume_spike = (cur_vol > (vol_sma * 1.5)) if vol_sma > 0 else True
                 
                 direction = None
                 trigger_reason = ""
@@ -267,6 +296,21 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             direction = tech_dir
                             trigger_reason = f"[TÉCNICO] Validação Direcional. Filtro [CVD] Confirmou (Delta: {cvd_delta:.0f})"
                             
+                # --- FILTROS FINAIS (Mercado e Volume) ---
+                if direction:
+                    if not has_volume_spike and '[GEMINI-AI]' not in trigger_reason:
+                        log(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.")
+                        direction = None
+                        
+                    elif direction == 'LONG' and btc_trend == 'BEAR' and symbol != 'BTCUSDT':
+                        log(f"🛡️ [REGIME] Bloqueando LONG em {symbol} pois o BTC está em tendência de BAIXA (RSI: {btc_rsi:.1f}).")
+                        direction = None
+                        
+                    elif direction == 'SHORT' and btc_trend == 'BULL' and symbol != 'BTCUSDT':
+                        log(f"🛡️ [REGIME] Bloqueando SHORT em {symbol} pois o BTC está em tendência de ALTA (RSI: {btc_rsi:.1f}).")
+                        direction = None
+                # ----------------------------------------
+
                 if direction:
                     # Re-avalia o saldo antes de entrar, pois operações anteriores no mesmo ciclo podem ter consumido a margem
                     current_balance = await get_futures_usdt_balance(client)
@@ -281,7 +325,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     log(f"🚨 [FUTUROS] Oportunidade {direction} detectada em {symbol} (RSI: {rsi:.1f})")
                     log(f"💡 Gatilho: {trigger_reason}")
                         
-                    initial_leverage = 20
+                    initial_leverage = 30
                     
                     # 2. Definição do TP/SL (Dinâmico)
                     if '[BAND-SNIPER 15M]' in trigger_reason:
