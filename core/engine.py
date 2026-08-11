@@ -718,10 +718,10 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
 
                 usdt_balance = await get_usdt_balance(client)
                 
-                # FASE 2: Daily Circuit Breaker (-5.0% Max Drawdown Diário)
+                # FASE 2: Daily Circuit Breaker (-20.0% Max Drawdown Diário)
                 daily_stats = db.get_daily_stats()
                 daily_pnl = daily_stats['daily_pnl']
-                circuit_breaker_limit = -abs(max(5.0, usdt_balance * 0.05))
+                circuit_breaker_limit = -abs(max(20.0, usdt_balance * 0.20))
                 
                 if daily_pnl <= circuit_breaker_limit:
                     status(f"🚨 DAILY CIRCUIT BREAKER ATIVADO ({daily_pnl:+.2f} USDT). Novas compras pausadas por 12h...")
@@ -730,7 +730,7 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
                         asyncio.create_task(send_telegram_message(
                             TELEGRAM_CONFIG['bot_token'], TELEGRAM_CONFIG['chat_id'],
                             f"🚨 <b>DAILY CIRCUIT BREAKER ATIVADO!</b>\n\n"
-                            f"📊 Perda acumulada hoje de <b>${daily_pnl:.2f} USDT</b> atingiu o limite de proteção de -5.0%!\n"
+                            f"📊 Perda acumulada hoje de <b>${daily_pnl:.2f} USDT</b> atingiu o limite de proteção de -20.0%!\n"
                             f"🛡️ Novas compras pausadas por 12 horas enquanto as ordens OCO ativas continuam sendo monitoradas."
                         ))
                     await asyncio.sleep(600)

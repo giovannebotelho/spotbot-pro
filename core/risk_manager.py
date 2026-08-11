@@ -5,12 +5,12 @@ from services.telegram_notifier import send_telegram_message
 
 async def check_daily_circuit_breaker(db, usdt_balance, current_dt, globals_dict, telegram_config, log_callback=print, status_callback=print):
     """
-    FASE 2: Avalia o Daily Circuit Breaker (-5.0% Max Drawdown Diário).
+    FASE 2: Avalia o Daily Circuit Breaker (-20.0% Max Drawdown Diário).
     Retorna True se o Circuit Breaker foi ativado (e a rotina principal deve aguardar).
     """
     daily_stats = db.get_daily_stats()
     daily_pnl = daily_stats['daily_pnl']
-    circuit_breaker_limit = -abs(max(5.0, usdt_balance * 0.05))
+    circuit_breaker_limit = -abs(max(20.0, usdt_balance * 0.20))
     
     if daily_pnl <= circuit_breaker_limit:
         status_callback(f"🚨 DAILY CIRCUIT BREAKER ATIVADO ({daily_pnl:+.2f} USDT). Novas compras pausadas por 12h...")
@@ -19,7 +19,7 @@ async def check_daily_circuit_breaker(db, usdt_balance, current_dt, globals_dict
             asyncio.create_task(send_telegram_message(
                 telegram_config['bot_token'], telegram_config['chat_id'],
                 f"🚨 <b>DAILY CIRCUIT BREAKER ATIVADO!</b>\n\n"
-                f"📊 Perda acumulada hoje de <b>${daily_pnl:.2f} USDT</b> atingiu o limite de proteção de -5.0%!\n"
+                f"📊 Perda acumulada hoje de <b>${daily_pnl:.2f} USDT</b> atingiu o limite de proteção de -20.0%!\n"
                 f"🛡️ Novas compras pausadas por 12 horas enquanto as ordens OCO ativas continuam sendo monitoradas."
             ))
         await asyncio.sleep(600)
