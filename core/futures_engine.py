@@ -263,9 +263,9 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 if direction:
                     # Re-avalia o saldo antes de entrar, pois operações anteriores no mesmo ciclo podem ter consumido a margem
                     current_balance = await get_futures_usdt_balance(client)
-                    # 1. Dimensionamento do Kelly Sizer
-                    from core.futures_kelly_sizer import calculate_optimal_margin
-                    margin_usdt = await calculate_optimal_margin(db, current_balance, log)
+                    # 1. Dimensionamento Fixo (Saldo / 3 - 5% de segurança)
+                    margin_usdt = (current_balance / 3) * 0.95
+                    log(f"🏆 \033[1;36mFixed Slot Sizing\033[0m: Margem de trade alocada em \033[1;32m${margin_usdt:.2f} USDT\033[0m (1/3 do saldo Futuros).")
                     
                     if current_balance < margin_usdt:
                         log(f"⚠️ Saldo atual ({current_balance:.2f}) menor que margem exigida ({margin_usdt:.2f}). Pausando scanner...")
