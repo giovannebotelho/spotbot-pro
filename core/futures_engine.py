@@ -287,12 +287,18 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     if '[BAND-SNIPER 15M]' in trigger_reason:
                         tp_price = bot_futures_status_data.pop('sniper_tp')
                         sl_price = bot_futures_status_data.pop('sniper_sl')
+                        
+                        # Trava de segurança: Garante que o TP não ultrapasse 8% de ROE (0.40% preço)
+                        if direction == 'LONG':
+                            tp_price = min(tp_price, cur_price * 1.0040)
+                        else:
+                            tp_price = max(tp_price, cur_price * 0.9960)
                     else:
                         if '[GEMINI-AI]' in trigger_reason:
-                            roi_tp = 1.0040 if direction == 'LONG' else 0.9960
+                            roi_tp = 1.0025 if direction == 'LONG' else 0.9975
                             roi_sl = 0.9975 if direction == 'LONG' else 1.0025 # SL super curto para notícia
                         else:
-                            roi_tp = 1.0040 if direction == 'LONG' else 0.9960
+                            roi_tp = 1.0025 if direction == 'LONG' else 0.9975
                             roi_sl = 0.9950 if direction == 'LONG' else 1.0050
                             
                         tp_price = cur_price * roi_tp
