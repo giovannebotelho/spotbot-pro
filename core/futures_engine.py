@@ -39,7 +39,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
     except Exception as e:
         log(f"⚠️ Erro ao buscar saldo inicial de Futuros: {e}")
         
-    from core.futures_order_manager import run_futures_user_stream, run_fallback_position_monitor
+    from core.futures_order_manager import run_fallback_position_monitor
+    from services.binance_futures_stream import run_futures_user_stream
     from core.futures_trailing_lock import run_trailing_lock_monitor
     asyncio.create_task(run_futures_user_stream(client, db, log))
     asyncio.create_task(run_fallback_position_monitor(client, db, log))

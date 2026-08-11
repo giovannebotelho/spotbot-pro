@@ -736,10 +736,10 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
                     await asyncio.sleep(600)
                     continue
 
-                # FASE 3: Gemini Auto-Tuning de Perfil de Risco a cada 120 min (2h)
+                # FASE 3: Gemini Auto-Tuning de Perfil de Risco a cada 240 min (4h)
                 import time
                 current_timestamp = time.time()
-                if current_timestamp - globals().get('_last_autotune_time', 0) >= 7200:
+                if current_timestamp - globals().get('_last_autotune_time', 0) >= 14400:
                     globals()['_last_autotune_time'] = current_timestamp
                     try:
                         db_stats = db.get_stats()
