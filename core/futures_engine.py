@@ -6,7 +6,7 @@ from services.binance_client import (
     get_futures_usdt_balance, get_futures_klines
 )
 from core.decision import get_precision
-from core.indicators import calculate_rsi
+from core.indicators import calculate_rsi, check_candle_patterns, calculate_macd
 from core.futures_order_manager import monitor_futures_lifecycle
 from services.telegram_notifier import send_telegram_message
 from config.settings import TOP_40_SYMBOLS
@@ -219,6 +219,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 cur_price = closes[-1]
                 cur_open = float(klines[-1][1])
                 rsi = calculate_rsi(closes)
+                candle_patterns = check_candle_patterns(klines)
+                macd_current, signal_line_current = calculate_macd(closes)
                 
                 # Análise de Volume Relativo (Pico recente)
                 vol_sma = pd.Series(volumes_rec).rolling(10).mean().tolist()[-1] if len(volumes_rec) >= 10 else 0
@@ -296,9 +298,33 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             direction = tech_dir
                             trigger_reason = f"[TÉCNICO] Validação Direcional. Filtro [CVD] Confirmou (Delta: {cvd_delta:.0f})"
                             
+                if not direction:
+                    # 5. Price Action Reversão (Candle + MACD)
+                    has_bullish_candle = any(p in candle_patterns for p in ["Hammer", "Bullish Engulfing", "Piercing Line", "Morning Star", "Bullish Kicker"])
+                    has_bearish_candle = any(p in candle_patterns for p in ["Shooting Star", "Bearish Engulfing", "Dark Cloud Cover", "Evening Star", "Bearish Kicker", "Gravestone Doji"])
+                    
+                    if has_bullish_candle and macd_current > signal_line_current:
+                        direction = 'LONG'
+                        trigger_reason = f"🕯️ [PRICE ACTION] Padrão Altista ({candle_patterns[0]}) com MACD cruzando."
+                    elif has_bearish_candle and macd_current < signal_line_current:
+                        direction = 'SHORT'
+                        trigger_reason = f"🕯️ [PRICE ACTION] Padrão Baixista ({candle_patterns[0]}) com MACD cruzando."
+                            
                 # --- FILTROS FINAIS (Mercado e Volume) ---
                 if direction:
-                    if not has_volume_spike and '[GEMINI-AI]' not in trigger_reason:
+                    # Escudo de Price Action (Filtro Defensivo)
+                    has_bullish_defense = any(p in candle_patterns for p in ["Hammer", "Bullish Engulfing", "Piercing Line", "Bullish Kicker"])
+                    has_bearish_defense = any(p in candle_patterns for p in ["Shooting Star", "Bearish Engulfing", "Dark Cloud Cover", "Bearish Kicker"])
+                    
+                    if direction == 'LONG' and has_bearish_defense and '[PRICE ACTION]' not in trigger_reason:
+                        log(f"🛡️ [CANDLE SHIELD] Bloqueando LONG em {symbol} devido à vela forte de rejeição ({candle_patterns[0]}).")
+                        direction = None
+                        
+                    elif direction == 'SHORT' and has_bullish_defense and '[PRICE ACTION]' not in trigger_reason:
+                        log(f"🛡️ [CANDLE SHIELD] Bloqueando SHORT em {symbol} devido à vela forte de rejeição ({candle_patterns[0]}).")
+                        direction = None
+                        
+                    elif not has_volume_spike and '[GEMINI-AI]' not in trigger_reason:
                         log(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.")
                         direction = None
                         
