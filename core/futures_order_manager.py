@@ -136,15 +136,12 @@ async def monitor_futures_lifecycle(
     return
 
 async def close_futures_position(client, symbol, side, qty, tp_order, sl_order, log):
-    """Fecha a posição a mercado e cancela ordens orfãs."""
-    if tp_order:
-        try:
-            await cancel_futures_order(client, symbol, tp_order)
-        except: pass
-    if sl_order:
-        try:
-            await cancel_futures_order(client, symbol, sl_order)
-        except: pass
+    """Fecha a posição a mercado e cancela todas as ordens orfãs."""
+    try:
+        await client.futures_cancel_all_open_orders(symbol=symbol)
+        log(f"🧹 [CLEANUP] Todas as ordens abertas para {symbol} foram canceladas.")
+    except Exception as e:
+        log(f"⚠️ Erro ao cancelar ordens pendentes de {symbol}: {e}")
     
     if qty > 0:
         try:
