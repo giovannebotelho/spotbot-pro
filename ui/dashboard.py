@@ -74,7 +74,9 @@ def log_handler(message):
     logs_buffer.append(clean_msg)
     if log_ui:
         try:
-            log_ui.push(clean_msg)
+            from nicegui import Client
+            if hasattr(log_ui, 'client') and log_ui.client.id in Client.instances:
+                log_ui.push(clean_msg)
         except Exception:
             pass
 
