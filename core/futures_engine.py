@@ -9,7 +9,7 @@ from core.decision import get_precision
 from core.indicators import calculate_rsi, check_candle_patterns, calculate_macd, calculate_atr
 from core.futures_order_manager import monitor_futures_lifecycle
 from services.telegram_notifier import send_telegram_message
-from config.settings import TOP_40_SYMBOLS
+from config.settings import TOP_10_FUTURES_SYMBOLS
 
 bot_futures_running = False
 bot_futures_status_data = {
@@ -46,7 +46,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
     asyncio.create_task(run_fallback_position_monitor(client, db, log))
     asyncio.create_task(run_trailing_lock_monitor(client, log))
     
-    symbols_to_scan = TOP_40_SYMBOLS
+    symbols_to_scan = TOP_10_FUTURES_SYMBOLS
     
     try:
         exchange_info = await client.futures_exchange_info()
@@ -286,18 +286,18 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     
                     # Exaustão Extrema: Shortar o topo que rompeu a banda superior (independente se verde ou vermelho), ou Long no fundo.
                     if bb_upper and len(bb_upper) > 0 and bb_upper[-1] and cur_price >= bb_upper[-1]:
-                        if rsi > 60:
+                        if rsi > 65:
                             tech_dir = 'SHORT'
                     elif bb_lower and len(bb_lower) > 0 and bb_lower[-1] and cur_price <= bb_lower[-1]:
-                        if rsi < 40:
+                        if rsi < 35:
                             tech_dir = 'LONG'
                             
                     # Smart Relaxation: Se o RSI aponta exaustão e o Tape Reading (CVD) mostra força contrária confirmada
                     if not tech_dir:
-                        if rsi < 45 and cvd_direction == 'LONG':
+                        if rsi < 40 and cvd_direction == 'LONG':
                             tech_dir = 'LONG'
                             log(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD comprador massivo. Validando LONG antecipado em {symbol}.")
-                        elif rsi > 55 and cvd_direction == 'SHORT':
+                        elif rsi > 60 and cvd_direction == 'SHORT':
                             tech_dir = 'SHORT'
                             log(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.")
                             
@@ -341,11 +341,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         log(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.")
                         direction = None
                         
-                    elif direction == 'LONG' and ema_dist_pct < 0.5 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
+                    elif direction == 'LONG' and ema_dist_pct < 0.8 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
                         log(f"🛡️ [EMA DIST] Bloqueando LONG em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%).")
                         direction = None
                         
-                    elif direction == 'SHORT' and ema_dist_pct > -0.5 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
+                    elif direction == 'SHORT' and ema_dist_pct > -0.8 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
                         log(f"🛡️ [EMA DIST] Bloqueando SHORT em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%).")
                         direction = None
                         

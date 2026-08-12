@@ -46,6 +46,8 @@ usdt_val = None
 total_profit_val = None
 win_rate_val = None
 recent_trades_table = None
+futures_usdt_val = None
+futures_profit_val = None
 
 candle_chart = None
 scanner_table = None
@@ -248,7 +250,7 @@ def render_chart_tabs():
         chart_tabs.value = 'foco'
 
 async def update_data():
-    global start_btn, stop_btn, status_indicator, _last_chart_sig
+    global start_btn, stop_btn, status_indicator, _last_chart_sig, total_profit_val, win_rate_val, futures_usdt_val, futures_profit_val
     try:
         # Sincronização de Estado dos Botões entre Dispositivos (PC / Celular)
         is_running = engine.bot_running or (bot_task is not None and not bot_task.done())
@@ -281,10 +283,14 @@ async def update_data():
         
         stats = await asyncio.to_thread(db.get_stats)
         if total_profit_val:
-            total_profit_val.text = f"${stats['total_net_profit']:.2f}"
-            total_profit_val.classes(remove='text-emerald-400 text-rose-400', add='text-[#10B981]' if stats['total_net_profit'] >= 0 else 'text-[#F43F5E]')
+            total_profit_val.text = f"${stats['spot_net_profit']:.2f}"
+            total_profit_val.classes(remove='text-emerald-400 text-rose-400', add='text-[#10B981]' if stats['spot_net_profit'] >= 0 else 'text-[#F43F5E]')
         if win_rate_val:
-            win_rate_val.text = f"{stats['win_rate']:.1f}%"
+            win_rate_val.text = f"{stats['spot_win_rate']:.1f}%"
+            
+        if futures_profit_val:
+            futures_profit_val.text = f"${stats['futures_net_profit']:.2f}"
+            futures_profit_val.classes(remove='text-emerald-400 text-rose-400', add='text-[#10B981]' if stats['futures_net_profit'] >= 0 else 'text-[#F43F5E]')
         
         # Sincronização Automática do Perfil de Risco (Gemini Auto-Tuning)
         if risk_profile_select and settings.ACTIVE_RISK_PROFILE:
@@ -434,7 +440,7 @@ async def update_data():
                 candle_chart.options['series'][7]['data'] = fut_market_data.get('volumes', [])
                 candle_chart.update()
 
-        await update_recent_trades_table()
+
 
         insight = engine.shared_market_data.get('gemini_insight')
         if insight and ai_signal_label and ai_reason_markdown:
@@ -456,40 +462,7 @@ async def update_data():
     except Exception:
         pass
 
-async def update_recent_trades_table():
-    trades_df = await asyncio.to_thread(db.get_recent_trades, 10)
-    if trades_df.empty:
-        recent_trades_table.rows = []
-        recent_trades_table.update()
-        return
 
-    rows = []
-    for _, row in trades_df.iterrows():
-        pnl_val = row.get('Resultado da Ordem OCO')
-        if not isinstance(pnl_val, (int, float)):
-             pnl_val = row.get('Resultado Total Liquido') or row.get('Resultado Parcial da Transação Líquido', 0)
-        
-        try:
-            pnl_float = float(pnl_val)
-            pnl_str = f"{pnl_float:.2f}"
-        except Exception:
-            pnl_str = "0.00"
-            pnl_float = 0.0
-        
-        m_type = str(row.get('market_type', 'SPOT')).upper()
-        d_type = str(row.get('direction', 'LONG')).upper()
-        
-        rows.append({
-            'date': str(row.get('Data/Hora da Compra', 'N/A')),
-            'pair': str(row.get('Símbolo', 'N/A')),
-            'market': m_type,
-            'type': d_type,
-            'pnl': pnl_str,
-            'pnl_raw': pnl_float
-        })
-        
-    recent_trades_table.rows = rows
-    recent_trades_table.update()
 
 async def start_bot():
     global bot_task
@@ -634,7 +607,7 @@ async def index():
     global log_ui, status_ui, investment_input, symbol_select, bnb_val, bnb_usdt_val, usdt_val
     global total_profit_val, win_rate_val, recent_trades_table, status_indicator, candle_chart, scanner_table, futures_candle_chart, futures_chart_symbol_badge
     global ai_signal_label, ai_reason_markdown, ai_reason_container, ai_card, risk_profile_select, paper_trading_switch
-    global chart_symbol_badge, start_btn, stop_btn, cancel_btn
+    global chart_symbol_badge, start_btn, stop_btn, cancel_btn, futures_usdt_val, futures_profit_val
     
     ui.colors(primary='#0ea5e9', secondary='#64748b', accent='#10b981', positive='#10b981', negative='#f43f5e', dark='#020617')
     
@@ -838,61 +811,21 @@ async def index():
                     ui.label('🩵 Entrada').classes('text-sky-400 font-bold')
 
             # Área do Gráfico
-            with ui.column().classes('w-full flex-shrink-0 h-[470px] lg:h-[64vh] min-h-[420px] p-0 border-b border-slate-800 relative'):
+            with ui.column().classes('w-full flex-shrink-0 h-[600px] lg:h-[80vh] min-h-[550px] p-0 border-b border-slate-800 relative'):
                 with ui.row().classes('absolute top-3 right-4 z-20 items-center gap-2'):
                     ui.button(icon='refresh', on_click=lambda: asyncio.create_task(change_chart_asset(selected_chart_symbol if selected_chart_symbol else 'foco'))).props('dense flat color=sky-400 size=sm').classes('glass-panel border border-sky-500/30 rounded-lg shadow-md px-2 py-1').tooltip('Recarregar Gráfico')
                     futures_chart_symbol_badge = ui.label('').classes('obsidian-card px-3 py-1 rounded-xl text-xs font-bold font-mono text-rose-400 border border-rose-900/50 backdrop-blur-md shadow-lg')
                     chart_symbol_badge = ui.label('🪙 BTCUSDT').classes('obsidian-card px-3 py-1 rounded-xl text-xs font-bold font-mono text-sky-400 border border-sky-500/30 backdrop-blur-md shadow-lg')
                 candle_chart = ui.echart(get_main_chart_options()).classes('w-full h-full')
 
-            # Painel Inferior (Execuções + Terminal Output Sincronizado)
+            # Painel Inferior (Terminal Output Sincronizado Full Width)
             with ui.row().classes('w-full flex-shrink-0 flex-col lg:flex-row gap-0 bg-transparent min-h-[280px]'):
-                with ui.column().classes('w-full lg:w-3/5 h-64 lg:h-72 border-b lg:border-b-0 lg:border-r border-white/5 bg-transparent p-0 flex-col'):
-                    with ui.row().classes('w-full h-8 items-center px-4 border-b border-white/5 glass-panel justify-between flex-shrink-0'):
-                        ui.label('HISTÓRICO DE EXECUÇÕES').classes('text-[0.6rem] font-bold text-slate-400 tracking-widest')
-                        ui.icon('history', size='xs', color='slate-500')
-                     
-                    recent_trades_table = ui.table(
-                        columns=get_recent_trades_columns(),
-                        rows=[],
-                        pagination={'rowsPerPage': 5}
-                    ).classes('w-full h-full no-shadow bg-transparent text-slate-300').props('flat dense square')
-                    
-                    recent_trades_table.add_slot('header', r'''
-                       <q-tr :props="props" class="glass-panel text-slate-400 text-xs font-semibold">
-                           <q-th v-for="col in props.cols" :key="col.name" :props="props">
-                               {{ col.label }}
-                           </q-th>
-                       </q-tr>
-                    ''')
-
-                    recent_trades_table.add_slot('body', r'''
-                        <q-tr :props="props">
-                            <q-td key="date" :props="props" class="text-xs text-slate-400 font-mono">{{ props.row.date }}</q-td>
-                            <q-td key="pair" :props="props" class="text-xs font-bold font-mono">{{ props.row.pair }}</q-td>
-                            <q-td key="market" :props="props">
-                                <q-badge :color="props.row.market === 'FUTURES' ? 'red-10' : 'sky-9'" class="text-[0.6rem] font-bold">
-                                    {{ props.row.market }}
-                                </q-badge>
-                            </q-td>
-                            <q-td key="type" :props="props">
-                                <q-badge :color="props.row.type === 'SHORT' ? 'red-5' : (props.row.type === 'LONG' ? 'green-5' : 'slate-7')" text-color="white" class="text-[0.6rem] font-bold shadow-md">
-                                    {{ props.row.type }}
-                                </q-badge>
-                            </q-td>
-                            <q-td key="pnl" :props="props" :class="props.row.pnl_raw > 0 ? 'text-emerald-400 font-bold font-mono' : 'text-rose-400 font-bold font-mono'">
-                                <span v-if="props.row.pnl_raw > 0">+</span>
-                                ${{ props.row.pnl }}
-                            </q-td>
-                        </q-tr>
-                    ''')
-
-                with ui.column().classes('w-full lg:w-2/5 h-64 lg:h-72 bg-transparent border-t lg:border-t-0 border-white/5 p-0 flex-col'):
+                with ui.column().classes('w-full h-72 bg-transparent p-0 flex-col'):
                     with ui.row().classes('w-full h-8 items-center px-4 border-b border-white/5 glass-panel gap-2 flex-shrink-0'):
                        ui.icon('terminal', size='xs', color='sky-400')
                        ui.label('TERMINAL OUTPUT (SINCRONIZADO)').classes('text-[0.6rem] font-bold text-slate-400 tracking-widest')
                      
-                    log_ui = ui.log(max_lines=300).classes('w-full h-[calc(100%-2rem)] font-mono text-[0.65rem] glass-card text-emerald-400 p-3 rounded-none border-none leading-tight overflow-y-auto shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]')
+                    log_ui = ui.log(max_lines=500).classes('w-full h-[calc(100%-2rem)] font-mono text-[0.65rem] glass-card text-emerald-400 p-3 rounded-none border-none leading-tight overflow-y-auto shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]')
                     
                     # Popula com os logs recentes sincronizados do buffer
                     for past_msg in list(logs_buffer):

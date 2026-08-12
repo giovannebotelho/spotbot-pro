@@ -319,27 +319,49 @@ class DatabaseManager:
             conn = self.get_connection()
             try:
                 cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) as total FROM trades")
+                cursor.execute("SELECT COUNT(*) as total FROM trades WHERE market_type = 'SPOT' OR market_type IS NULL")
                 row = cursor.fetchone()
-                total_trades = row["total"] if self.is_postgres else row[0]
+                spot_trades = row["total"] if self.is_postgres else row[0]
                 
-                cursor.execute("SELECT COUNT(*) as wins FROM trades WHERE oco_result = 'profit'")
+                cursor.execute("SELECT COUNT(*) as wins FROM trades WHERE (oco_result = 'profit' OR trade_result_net > 0) AND (market_type = 'SPOT' OR market_type IS NULL)")
                 row_wins = cursor.fetchone()
-                wins = row_wins["wins"] if self.is_postgres else row_wins[0]
+                spot_wins = row_wins["wins"] if self.is_postgres else row_wins[0]
                 
-                cursor.execute("SELECT SUM(trade_result_net) as net_sum FROM trades")
+                cursor.execute("SELECT COUNT(*) as total FROM trades WHERE market_type = 'FUTURES'")
+                row_fut = cursor.fetchone()
+                futures_trades = row_fut["total"] if self.is_postgres else row_fut[0]
+
+                cursor.execute("SELECT COUNT(*) as wins FROM trades WHERE trade_result_net > 0 AND market_type = 'FUTURES'")
+                row_fut_wins = cursor.fetchone()
+                futures_wins = row_fut_wins["wins"] if self.is_postgres else row_fut_wins[0]
+
+                cursor.execute("SELECT SUM(trade_result_net) as net_sum FROM trades WHERE market_type = 'SPOT' OR market_type IS NULL")
                 row_sum = cursor.fetchone()
                 result = row_sum["net_sum"] if self.is_postgres else row_sum[0]
-                total_net_profit = float(result) if result is not None else 0.0
+                spot_net_profit = float(result) if result is not None else 0.0
+
+                cursor.execute("SELECT SUM(trade_result_net) as net_sum FROM trades WHERE market_type = 'FUTURES'")
+                row_fut_sum = cursor.fetchone()
+                fut_result = row_fut_sum["net_sum"] if self.is_postgres else row_fut_sum[0]
+                futures_net_profit = float(fut_result) if fut_result is not None else 0.0
                 
-                win_rate = (wins / total_trades * 100) if total_trades > 0 else 0
+                spot_win_rate = (spot_wins / spot_trades * 100) if spot_trades > 0 else 0
+                futures_win_rate = (futures_wins / futures_trades * 100) if futures_trades > 0 else 0
+                total_net_profit = spot_net_profit + futures_net_profit
                 
                 _stats_cache = {
-                    "total_trades": total_trades,
-                    "wins": wins,
-                    "losses": total_trades - wins,
-                    "win_rate": win_rate,
-                    "total_net_profit": total_net_profit
+                    "total_trades": spot_trades + futures_trades,
+                    "spot_trades": spot_trades,
+                    "futures_trades": futures_trades,
+                    "wins": spot_wins + futures_wins,
+                    "spot_wins": spot_wins,
+                    "futures_wins": futures_wins,
+                    "win_rate": spot_win_rate,
+                    "spot_win_rate": spot_win_rate,
+                    "futures_win_rate": futures_win_rate,
+                    "total_net_profit": total_net_profit,
+                    "spot_net_profit": spot_net_profit,
+                    "futures_net_profit": futures_net_profit
                 }
                 _last_stats_time = now
                 return _stats_cache
@@ -347,7 +369,9 @@ class DatabaseManager:
                 self.release_connection(conn)
         except Exception:
             return {
-                "total_trades": 0, "wins": 0, "losses": 0, "win_rate": 0, "total_net_profit": 0.0
+                "total_trades": 0, "wins": 0, "losses": 0, "win_rate": 0, "total_net_profit": 0.0,
+                "spot_trades": 0, "futures_trades": 0, "spot_wins": 0, "futures_wins": 0,
+                "spot_win_rate": 0, "futures_win_rate": 0, "spot_net_profit": 0.0, "futures_net_profit": 0.0
             }
 
     def get_daily_stats(self, date_str=None):
