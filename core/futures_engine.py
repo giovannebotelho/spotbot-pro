@@ -225,7 +225,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 # Análise de Volume Relativo (Pico recente)
                 vol_sma = pd.Series(volumes_rec).rolling(10).mean().tolist()[-1] if len(volumes_rec) >= 10 else 0
                 cur_vol = volumes_rec[-1]
-                has_volume_spike = (cur_vol > (vol_sma * 1.5)) if vol_sma > 0 else True
+                has_volume_spike = (cur_vol > (vol_sma * 1.3)) if vol_sma > 0 else True
                 
                 # Análise de Distância da EMA20
                 ema20_val = pd.Series(closes).ewm(span=20, adjust=False).mean().iloc[-1]
