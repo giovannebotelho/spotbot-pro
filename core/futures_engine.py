@@ -377,6 +377,61 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             direction = None
 
                 if direction:
+                    log(f"🚨 [FUTUROS] Oportunidade {direction} detectada em {symbol} (Gatilho: {trigger_reason})")
+                    log(f"🎯 [SNIPER MODE] Iniciando observação tática por até 3 minutos para exaustão...")
+                    
+                    import time
+                    stalk_start = time.time()
+                    stalk_duration = 180
+                    price_history = []
+                    stalk_success = False
+                    
+                    while time.time() - stalk_start < stalk_duration:
+                        if not bot_futures_running: break
+                        try:
+                            ticker = await client.futures_symbol_ticker(symbol=symbol)
+                            realtime_price = float(ticker['price'])
+                            price_history.append(realtime_price)
+                            
+                            if len(price_history) > 5:
+                                price_history.pop(0)
+                                
+                            if len(price_history) == 5:
+                                p_oldest = price_history[0]
+                                p_newest = price_history[-1]
+                                
+                                if direction == 'LONG':
+                                    if realtime_price <= cur_price and p_newest > p_oldest:
+                                        log(f"🔥 [SNIPER] Exaustão detectada! Desconto obtido: {cur_price} -> {realtime_price}. FOGO!")
+                                        cur_price = realtime_price
+                                        stalk_success = True
+                                        break
+                                    elif realtime_price > cur_price * 1.002: 
+                                        log(f"🔥 [SNIPER] Preço subindo rápido ({realtime_price}). Entrando a mercado!")
+                                        cur_price = realtime_price
+                                        stalk_success = True
+                                        break
+                                elif direction == 'SHORT':
+                                    if realtime_price >= cur_price and p_newest < p_oldest:
+                                        log(f"🔥 [SNIPER] Exaustão detectada! Ágio obtido: {cur_price} -> {realtime_price}. FOGO!")
+                                        cur_price = realtime_price
+                                        stalk_success = True
+                                        break
+                                    elif realtime_price < cur_price * 0.998:
+                                        log(f"🔥 [SNIPER] Preço caindo rápido ({realtime_price}). Entrando a mercado!")
+                                        cur_price = realtime_price
+                                        stalk_success = True
+                                        break
+                            await asyncio.sleep(2)
+                        except Exception as e:
+                            log(f"⚠️ Erro no Modo Sniper: {e}")
+                            break
+                            
+                    if not stalk_success:
+                        log(f"🛑 [SNIPER] Alvo {symbol} perdido. A exaustão não confirmou. Trade abortado.")
+                        direction = None
+
+                if direction:
                     # Re-avalia o saldo antes de entrar, pois operações anteriores no mesmo ciclo podem ter consumido a margem
                     current_balance = await get_futures_usdt_balance(client)
                     # 1. Dimensionamento Fixo (Saldo / 3 - 5% de segurança)
@@ -386,9 +441,6 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     if current_balance < margin_usdt:
                         log(f"⚠️ Saldo atual ({current_balance:.2f}) menor que margem exigida ({margin_usdt:.2f}). Pausando scanner...")
                         break
-                        
-                    log(f"🚨 [FUTUROS] Oportunidade {direction} detectada em {symbol} (RSI: {rsi:.1f})")
-                    log(f"💡 Gatilho: {trigger_reason}")
                         
                     initial_leverage = 20
                     
