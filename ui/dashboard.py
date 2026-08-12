@@ -48,6 +48,7 @@ win_rate_val = None
 recent_trades_table = None
 futures_usdt_val = None
 futures_profit_val = None
+futures_win_rate_val = None
 
 candle_chart = None
 scanner_table = None
@@ -250,7 +251,7 @@ def render_chart_tabs():
         chart_tabs.value = 'foco'
 
 async def update_data():
-    global start_btn, stop_btn, status_indicator, _last_chart_sig, total_profit_val, win_rate_val, futures_usdt_val, futures_profit_val
+    global start_btn, stop_btn, status_indicator, _last_chart_sig, total_profit_val, win_rate_val, futures_usdt_val, futures_profit_val, futures_win_rate_val
     try:
         # Sincronização de Estado dos Botões entre Dispositivos (PC / Celular)
         is_running = engine.bot_running or (bot_task is not None and not bot_task.done())
@@ -291,6 +292,16 @@ async def update_data():
         if futures_profit_val:
             futures_profit_val.text = f"${stats['futures_net_profit']:.2f}"
             futures_profit_val.classes(remove='text-emerald-400 text-rose-400', add='text-[#10B981]' if stats['futures_net_profit'] >= 0 else 'text-[#F43F5E]')
+        if futures_win_rate_val:
+            futures_win_rate_val.text = f"{stats.get('futures_win_rate', 0.0):.1f}%"
+        
+        if futures_usdt_val:
+            try:
+                from core.futures_engine import get_futures_usdt_balance
+                fut_bal = await get_futures_usdt_balance(engine.client)
+                futures_usdt_val.text = f"${fut_bal:.2f}"
+            except Exception:
+                pass
         
         # Sincronização Automática do Perfil de Risco (Gemini Auto-Tuning)
         if risk_profile_select and settings.ACTIVE_RISK_PROFILE:
@@ -607,7 +618,7 @@ async def index():
     global log_ui, status_ui, investment_input, symbol_select, bnb_val, bnb_usdt_val, usdt_val
     global total_profit_val, win_rate_val, recent_trades_table, status_indicator, candle_chart, scanner_table, futures_candle_chart, futures_chart_symbol_badge
     global ai_signal_label, ai_reason_markdown, ai_reason_container, ai_card, risk_profile_select, paper_trading_switch
-    global chart_symbol_badge, start_btn, stop_btn, cancel_btn, futures_usdt_val, futures_profit_val
+    global chart_symbol_badge, start_btn, stop_btn, cancel_btn, futures_usdt_val, futures_profit_val, futures_win_rate_val
     
     ui.colors(primary='#0ea5e9', secondary='#64748b', accent='#10b981', positive='#10b981', negative='#f43f5e', dark='#020617')
     
@@ -691,9 +702,12 @@ async def index():
                 ui.toggle({'15m': '15m (Fixo)'}, value='15m').props('unelevated dense spread size=xs color=slate-900 text-color=rose-400 toggle-color=rose-900 disable').classes('w-full border border-rose-900/50 rounded-lg overflow-hidden text-[0.6rem] opacity-70')
 
             with ui.column().classes('w-full gap-2 mt-1'):
-                ui.label('PERFORMANCE').classes('text-[0.6rem] font-bold text-slate-500 tracking-widest')
+                ui.label('PERFORMANCE (SPOT)').classes('text-[0.6rem] font-bold text-slate-500 tracking-widest')
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-slate-800'):
-                    ui.label('Lucro Total').classes('text-xs text-slate-400')
+                    ui.label('Saldo Spot').classes('text-xs text-slate-400')
+                    usdt_val = ui.label('$0.00').classes('font-mono text-sm font-bold text-sky-400')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-slate-800'):
+                    ui.label('Lucro Spot').classes('text-xs text-slate-400')
                     total_profit_val = ui.label('$0.00').classes('font-mono text-sm font-bold text-[#10B981]')
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-slate-800'):
                     ui.label('Taxa de Vitória').classes('text-xs text-slate-400')
@@ -712,12 +726,20 @@ async def index():
             with ui.column().classes('w-full gap-2 mt-2'):
                 ui.label('MERCADO FUTUROS (HedgeFund)').classes('text-[0.6rem] font-bold text-slate-500 tracking-widest')
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-rose-500/30 shadow-[inset_0_0_15px_rgba(244,63,94,0.05)]'):
+                    ui.label('Modo de Monitoramento').classes('text-xs text-slate-400')
+                    ui.label('⚡ SCANNER TOP 10').classes('font-mono text-[0.65rem] font-bold text-rose-400')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-rose-500/30 shadow-[inset_0_0_15px_rgba(244,63,94,0.05)]'):
+                    ui.label('Alavancagem').classes('text-xs text-slate-400')
+                    ui.label('15x - Isolada').classes('font-mono text-[0.65rem] font-bold text-rose-400')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-rose-500/30 shadow-[inset_0_0_15px_rgba(244,63,94,0.05)]'):
                     ui.label('Saldo Futuros').classes('text-xs text-slate-400')
                     futures_usdt_val = ui.label('$0.00').classes('font-mono text-sm font-bold text-rose-400')
-                
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-rose-500/30 shadow-[inset_0_0_15px_rgba(244,63,94,0.05)]'):
-                    ui.label('Lucro (Futuros)').classes('text-xs text-slate-400')
+                    ui.label('Lucro Futuros').classes('text-xs text-slate-400')
                     futures_profit_val = ui.label('$0.00').classes('font-mono text-sm font-bold text-rose-400')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-rose-500/30 shadow-[inset_0_0_15px_rgba(244,63,94,0.05)]'):
+                    ui.label('Taxa de Vitória').classes('text-xs text-slate-400')
+                    futures_win_rate_val = ui.label('0.0%').classes('font-mono text-sm font-bold text-rose-400')
 
             with ui.column().classes('w-full gap-1 mt-2'):
                 ui.label('STATUS ATUAL').classes('text-[0.6rem] font-bold text-slate-500 tracking-widest')
