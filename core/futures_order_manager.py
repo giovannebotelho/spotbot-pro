@@ -210,10 +210,10 @@ async def place_futures_trade_with_protection(client, symbol, side, qty, tp_pric
         # Determina lado de saída
         exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
-        # 2. Ordem TP
+        # 2. Ordem Trailing Stop (Substitui o Take Profit Fixo)
         tp_order = await client.futures_create_order(
-            symbol=symbol, side=exit_side, type='TAKE_PROFIT_MARKET',
-            stopPrice=str(tp_price), closePosition='true', timeInForce='GTC'
+            symbol=symbol, side=exit_side, type='TRAILING_STOP_MARKET',
+            callbackRate='1.5', quantity=qty, reduceOnly='true'
         )
         
         # 3. Ordem SL
@@ -244,7 +244,7 @@ async def handle_user_data_stream_event(client, db, event, log):
         status = order.get('X')
         order_type = order.get('o')
         
-        if status == 'FILLED' and order_type in ['TAKE_PROFIT_MARKET', 'STOP_MARKET', 'MARKET']:
+        if status == 'FILLED' and order_type in ['TAKE_PROFIT_MARKET', 'STOP_MARKET', 'MARKET', 'TRAILING_STOP_MARKET']:
             # Verifica se o símbolo está ativo para fechar e limpar
             active_futures_positions = await futures_state.get_all()
             if symbol in active_futures_positions:

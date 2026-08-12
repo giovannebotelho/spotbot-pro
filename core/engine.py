@@ -936,12 +936,12 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
                         pos_multiplier = buy_result.get('position_multiplier', 1.0)
                         safe_usdt_limit = math.floor(usdt_balance * 0.99 * 100) / 100.0
                         
-                        # FASE 5 (v7.0): Slot fixo (Saldo / 3) - Margem de segurança de 5%
-                        active_trades_count = len(bot_status_data['active_trades'])
-                        available_slots = max(1, 3 - active_trades_count)
+                        # FASE 5 (v7.0): Auto-Compounding (Efeito Soros) - Reinvestimento contínuo do lucro
+                        active_trades_count = len(active_positions)
+                        available_slots = max(1, MAX_CONCURRENT_POSITIONS - active_trades_count)
                         target_slot = (usdt_balance / available_slots) * 0.95
                         
-                        log(f"🏆 \033[1;36mFixed Slot Sizing\033[0m: Lote dimensionado em \033[1;32m${target_slot:.2f} USDT\033[0m ({active_trades_count}/3 ordens ativas).")
+                        log(f"🏆 \033[1;36mAuto-Compounding (Efeito Soros)\033[0m: Lote dimensionado em \033[1;32m${target_slot:.2f} USDT\033[0m ({active_trades_count}/{MAX_CONCURRENT_POSITIONS} vagas).")
 
                         order_val_usdt = max(min_notional, min(safe_usdt_limit, round(target_slot * pos_multiplier, 2)))
 

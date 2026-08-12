@@ -241,6 +241,19 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     direction = gemini_dir
                     trigger_reason = f"[GEMINI-AI] Notícia Extrema ({score}): {reason}"
                     
+                # 1.5 Liquidation Hunter (Short Squeeze Detector)
+                if not direction:
+                    if bb_lower and len(bb_lower) > 0 and bb_lower[-1] and bb_upper and len(bb_upper) > 0 and bb_upper[-1]:
+                        dist_lower_bb = ((cur_price - bb_lower[-1]) / bb_lower[-1]) * 100
+                        dist_upper_bb = ((cur_price - bb_upper[-1]) / bb_upper[-1]) * 100
+                        
+                        if dist_lower_bb < -1.5 and has_volume_spike and rsi < 25:
+                            direction = 'LONG'
+                            trigger_reason = f"🩸 [LIQUIDATION HUNTER] Liquidação em massa detectada! Dist BB: {dist_lower_bb:.2f}% | RSI: {rsi:.1f}"
+                        elif dist_upper_bb > 1.5 and has_volume_spike and rsi > 75:
+                            direction = 'SHORT'
+                            trigger_reason = f"🩸 [LIQUIDATION HUNTER] FOMO em massa detectado! Dist BB: +{dist_upper_bb:.2f}% | RSI: {rsi:.1f}"
+                    
                 # 2. 15m Bollinger Band Sniper (Reversão à Média Extrema)
                 if not direction:
                     from core.futures_band_sniper import evaluate_band_sniper

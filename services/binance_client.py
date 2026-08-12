@@ -211,9 +211,9 @@ async def place_futures_order(client, symbol, side, order_type, quantity, price=
         
     return await client.futures_create_order(**params)
 
-async def place_futures_conditional_order(client, symbol, side, order_type, quantity, stop_price):
+async def place_futures_conditional_order(client, symbol, side, order_type, quantity, stop_price=None, callback_rate=None):
     """
-    Envia uma ordem condicional para Futuros (STOP_MARKET ou TAKE_PROFIT_MARKET).
+    Envia uma ordem condicional para Futuros (STOP_MARKET, TAKE_PROFIT_MARKET ou TRAILING_STOP_MARKET).
     Essas ordens são usadas como Stop Loss e Take Profit no Futures.
     """
     params = {
@@ -221,10 +221,19 @@ async def place_futures_conditional_order(client, symbol, side, order_type, quan
         'side': side,
         'type': order_type,
         'quantity': quantity,
-        'stopPrice': str(stop_price),
-        'timeInForce': 'GTC',
         'reduceOnly': 'true'
     }
+    
+    if order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET'] and stop_price:
+        params['stopPrice'] = str(stop_price)
+        params['timeInForce'] = 'GTC'
+        
+    if order_type == 'TRAILING_STOP_MARKET':
+        if callback_rate:
+            params['callbackRate'] = str(callback_rate)
+        if stop_price:
+            params['activationPrice'] = str(stop_price)
+            
     return await client.futures_create_order(**params)
 
 async def get_futures_order_details(client, symbol, order_id):
