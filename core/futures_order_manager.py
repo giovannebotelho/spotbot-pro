@@ -189,7 +189,7 @@ async def register_futures_trade(client, db, symbol, direction, entry, exit, qty
             "market_type": "FUTURES",
             "direction": direction,
             "margin_type": "ISOLATED",
-            "leverage": 20
+            "leverage": 15
         }
         db.add_trade(data)
 

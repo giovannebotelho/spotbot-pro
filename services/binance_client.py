@@ -164,7 +164,7 @@ async def get_futures_whale_ratio(client, symbol, period='15m'):
         print(f"⚠️ Erro ao buscar Whale Ratio de {symbol}: {e}")
     return 1.0  # Neutro em caso de erro
 
-async def setup_futures_margin(client, symbol, leverage=20, margin_type='ISOLATED'):
+async def setup_futures_margin(client, symbol, leverage=15, margin_type='ISOLATED'):
     """
     Configura a alavancagem e o tipo de margem para o ativo.
     margin_type: 'ISOLATED' ou 'CROSSED'

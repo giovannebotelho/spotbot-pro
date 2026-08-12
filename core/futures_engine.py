@@ -455,7 +455,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         log(f"⚠️ Saldo atual ({current_balance:.2f}) menor que margem exigida ({margin_usdt:.2f}). Pausando scanner...")
                         break
                         
-                    initial_leverage = 20
+                    initial_leverage = 15
                     
                     # 2. Definição do TP/SL (Dinâmico)
                     if '[BAND-SNIPER 15M]' in trigger_reason:
