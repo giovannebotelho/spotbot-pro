@@ -222,7 +222,22 @@ async def place_futures_trade_with_protection(client, symbol, side, qty, tp_pric
             stopPrice=str(sl_price), closePosition='true', timeInForce='GTC'
         )
         
-        log(f"✅ [FUTUROS] Posição {side} aberta em {symbol} a ${entry_price:.4f} (TP: ${tp_price:.4f}, SL: ${sl_price:.4f})")
+        # 4. Hard Take Profit (10% ROI)
+        roi_target = 10.0
+        price_movement_pct = roi_target / leverage
+        if side == 'BUY':
+            hard_tp_price = entry_price * (1 + (price_movement_pct / 100.0))
+        else:
+            hard_tp_price = entry_price * (1 - (price_movement_pct / 100.0))
+            
+        hard_tp_price_str = str(round(hard_tp_price, 4))
+        
+        hard_tp_order = await client.futures_create_order(
+            symbol=symbol, side=exit_side, type='TAKE_PROFIT_MARKET',
+            stopPrice=hard_tp_price_str, closePosition='true', timeInForce='GTC'
+        )
+        
+        log(f"✅ [FUTUROS] Posição {side} aberta em {symbol} a ${entry_price:.4f} (TP 10% ROI: ${hard_tp_price:.4f}, SL: ${sl_price:.4f})")
         return entry_order, tp_order, sl_order, entry_price
     except Exception as e:
         log(f"⚠️ Erro ao posicionar trade em {symbol}: {e}")
