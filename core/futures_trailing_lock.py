@@ -94,13 +94,21 @@ async def execute_trailing_close(client, symbol, direction, qty, log):
     try:
         side_exit = 'SELL' if direction == 'LONG' else 'BUY'
         
-        # 1. Envia a mercado
-        from core.futures_order_manager import place_futures_order
-        await place_futures_order(client, symbol, side_exit, 'MARKET', qty, reduce_only=True)
+        # 1. Cancela TP/SL antigos para evitar órfãs e liberar margem ANTES de fechar
+        try:
+            await client.futures_cancel_all_open_orders(symbol=symbol)
+        except Exception as e:
+            log(f"⚠️ Aviso ao cancelar ordens pendentes de {symbol}: {e}")
         
-        # 2. Cancela TP/SL antigos para evitar órfãs
-        await client.futures_cancel_all_open_orders(symbol=symbol)
-        
-        log(f"✅ [TRAILING-LOCK] Posição de {symbol} fechada com sucesso em segurança.")
+        # 2. Envia a mercado
+        try:
+            await client.futures_create_order(symbol=symbol, side=side_exit, type='MARKET', quantity=qty, reduceOnly='true')
+            log(f"✅ [TRAILING-LOCK] Posição de {symbol} fechada com sucesso em segurança.")
+        except Exception as e:
+            if "ReduceOnly" not in str(e) and "-2022" not in str(e):
+                log(f"⚠️ Erro ao enviar ordem a mercado no Trailing Lock: {e}")
+            else:
+                log(f"✅ [TRAILING-LOCK] Posição já parece estar fechada.")
+                
     except Exception as e:
-        log(f"❌ Erro ao fechar Trailing Lock de {symbol}: {e}")
+        log(f"❌ Erro crítico no Trailing Lock de {symbol}: {e}")
