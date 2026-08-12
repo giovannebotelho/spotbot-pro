@@ -379,15 +379,20 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     except Exception as e:
                         log(f"⚠️ Erro ao checar MTF de {symbol}: {e}")
                         
-                    # 2. Whale Long/Short Ratio
+                    # 2. Smart Money & Whale Tracker (Evolução v2)
                     if direction:
-                        whale_ratio = await get_futures_whale_ratio(client, symbol, '15m')
-                        if direction == 'LONG' and whale_ratio < 0.85:
-                            log(f"🐋 [WHALE TRACKER] Bloqueando LONG em {symbol}. Top Traders estão massivamente VENDIDOS (Ratio: {whale_ratio:.2f}).")
+                        from core.futures_smart_money import evaluate_smart_money
+                        sm_dir, top_ratio, taker_ratio = await evaluate_smart_money(client, symbol, '15m', log)
+                        
+                        # Bloqueio Defensivo: Se o Smart Money (Taker + Top Traders) for totalmente contra nós
+                        if direction == 'LONG' and sm_dir == 'SHORT':
+                            log(f"🐋 [SMART MONEY] Bloqueando LONG em {symbol}. Baleias VENDENDO pesado (Top: {top_ratio:.2f}, Taker: {taker_ratio:.2f}).")
                             direction = None
-                        elif direction == 'SHORT' and whale_ratio > 1.15:
-                            log(f"🐋 [WHALE TRACKER] Bloqueando SHORT em {symbol}. Top Traders estão massivamente COMPRADOS (Ratio: {whale_ratio:.2f}).")
+                        elif direction == 'SHORT' and sm_dir == 'LONG':
+                            log(f"🐋 [SMART MONEY] Bloqueando SHORT em {symbol}. Baleias COMPRANDO pesado (Top: {top_ratio:.2f}, Taker: {taker_ratio:.2f}).")
                             direction = None
+                        elif sm_dir == direction:
+                            log(f"🐋 [SMART MONEY] Confluência ATIVA! Baleias e sistema apontando para {direction}. (Top: {top_ratio:.2f})")
 
                 if direction:
                     log(f"🚨 [FUTUROS] Oportunidade {direction} detectada em {symbol} (Gatilho: {trigger_reason})")
