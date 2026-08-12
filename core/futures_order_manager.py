@@ -230,7 +230,15 @@ async def place_futures_trade_with_protection(client, symbol, side, qty, tp_pric
         else:
             hard_tp_price = entry_price * (1 - (price_movement_pct / 100.0))
             
-        hard_tp_price_str = str(round(hard_tp_price, 4))
+        # Deduz a precisão correta através do sl_price que já vem com o arredondamento da exchange
+        sl_str = str(sl_price)
+        precision = len(sl_str.split('.')[1]) if '.' in sl_str else 0
+        
+        hard_tp_price = round(hard_tp_price, precision)
+        
+        # Formata explicitamente para garantir que Python não adicione notação científica
+        format_str = f"{{:.{precision}f}}"
+        hard_tp_price_str = format_str.format(hard_tp_price)
         
         hard_tp_order = await client.futures_create_order(
             symbol=symbol, side=exit_side, type='TAKE_PROFIT_MARKET',
