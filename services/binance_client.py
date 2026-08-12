@@ -151,6 +151,19 @@ async def get_futures_usdt_balance(client):
             print(f"⚠️ Erro ao buscar saldo USDT Futuros: {e}")
         return 0.0
 
+async def get_futures_whale_ratio(client, symbol, period='15m'):
+    """
+    Busca o 'Top Trader Long/Short Ratio' (Positions) da Binance Futures.
+    Retorna float: > 1 significa baleias em LONG, < 1 significa baleias em SHORT.
+    """
+    try:
+        data = await client.futures_top_longshort_position_ratio(symbol=symbol, period=period)
+        if data and len(data) > 0:
+            return float(data[-1]['longShortRatio'])
+    except Exception as e:
+        print(f"⚠️ Erro ao buscar Whale Ratio de {symbol}: {e}")
+    return 1.0  # Neutro em caso de erro
+
 async def setup_futures_margin(client, symbol, leverage=20, margin_type='ISOLATED'):
     """
     Configura a alavancagem e o tipo de margem para o ativo.

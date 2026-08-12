@@ -3,10 +3,10 @@ from config.settings import TELEGRAM_CONFIG, TIMEZONE
 from core.futures_state import futures_state
 from services.binance_client import (
     setup_futures_margin, place_futures_order, place_futures_conditional_order,
-    get_futures_usdt_balance, get_futures_klines
+    get_futures_usdt_balance, get_futures_klines, get_futures_whale_ratio
 )
 from core.decision import get_precision
-from core.indicators import calculate_rsi, check_candle_patterns, calculate_macd
+from core.indicators import calculate_rsi, check_candle_patterns, calculate_macd, calculate_atr
 from core.futures_order_manager import monitor_futures_lifecycle
 from services.telegram_notifier import send_telegram_message
 from config.settings import TOP_40_SYMBOLS
@@ -344,6 +344,37 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         log(f"🛡️ [REGIME] Bloqueando SHORT em {symbol} pois o BTC está em tendência de ALTA (RSI: {btc_rsi:.1f}).")
                         direction = None
                 # ----------------------------------------
+                # ----------------------------------------
+
+                # --- ALINHAMENTO MULTI-TIMEFRAME & WHALE TRACKER (Lazy Load) ---
+                if direction and '[BAND-SNIPER 15M]' not in trigger_reason:
+                    # 1. MTF 1H EMA20
+                    try:
+                        klines_1h = await get_futures_klines(client, symbol, interval='1h', limit=50)
+                        if klines_1h and len(klines_1h) >= 20:
+                            import pandas as pd
+                            closes_1h = [float(k[4]) for k in klines_1h]
+                            ema20_1h = pd.Series(closes_1h).ewm(span=20, adjust=False).mean().tolist()[-1]
+                            price_1h = closes_1h[-1]
+                            
+                            if direction == 'LONG' and price_1h < ema20_1h:
+                                log(f"🛡️ [MTF] Bloqueando LONG em {symbol}. Preço no 1H (${price_1h:.4f}) está abaixo da EMA20 (${ema20_1h:.4f}).")
+                                direction = None
+                            elif direction == 'SHORT' and price_1h > ema20_1h:
+                                log(f"🛡️ [MTF] Bloqueando SHORT em {symbol}. Preço no 1H (${price_1h:.4f}) está acima da EMA20 (${ema20_1h:.4f}).")
+                                direction = None
+                    except Exception as e:
+                        log(f"⚠️ Erro ao checar MTF de {symbol}: {e}")
+                        
+                    # 2. Whale Long/Short Ratio
+                    if direction:
+                        whale_ratio = await get_futures_whale_ratio(client, symbol, '15m')
+                        if direction == 'LONG' and whale_ratio < 0.85:
+                            log(f"🐋 [WHALE TRACKER] Bloqueando LONG em {symbol}. Top Traders estão massivamente VENDIDOS (Ratio: {whale_ratio:.2f}).")
+                            direction = None
+                        elif direction == 'SHORT' and whale_ratio > 1.15:
+                            log(f"🐋 [WHALE TRACKER] Bloqueando SHORT em {symbol}. Top Traders estão massivamente COMPRADOS (Ratio: {whale_ratio:.2f}).")
+                            direction = None
 
                 if direction:
                     # Re-avalia o saldo antes de entrar, pois operações anteriores no mesmo ciclo podem ter consumido a margem
@@ -372,15 +403,22 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         else:
                             tp_price = max(tp_price, cur_price * 0.9960)
                     else:
+                        atr_val = calculate_atr(klines, period=14)
+                        if atr_val == 0: atr_val = cur_price * 0.015
+                        
                         if '[GEMINI-AI]' in trigger_reason:
-                            roi_tp = 1.0025 if direction == 'LONG' else 0.9975
-                            roi_sl = 0.9975 if direction == 'LONG' else 1.0025 # SL super curto para notícia
+                            tp_dist = atr_val * 0.5
+                            sl_dist = atr_val * 0.3
                         else:
-                            roi_tp = 1.0060 if direction == 'LONG' else 0.9940
-                            roi_sl = 0.9850 if direction == 'LONG' else 1.0150
+                            tp_dist = atr_val * 1.0  # Alvo 1x ATR
+                            sl_dist = atr_val * 1.5  # Stop Seguro 1.5x ATR
                             
-                        tp_price = cur_price * roi_tp
-                        sl_price = cur_price * roi_sl
+                        if direction == 'LONG':
+                            tp_price = cur_price + tp_dist
+                            sl_price = cur_price - sl_dist
+                        else:
+                            tp_price = cur_price - tp_dist
+                            sl_price = cur_price + sl_dist
                     
                     # 3. Gerenciamento de Risco (Liquidation Buffer)
                     from core.futures_risk_manager import validate_trade_safety
