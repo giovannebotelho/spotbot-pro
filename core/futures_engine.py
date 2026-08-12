@@ -403,7 +403,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         else:
                             tp_price = max(tp_price, cur_price * 0.9960)
                     else:
-                        atr_val = calculate_atr(klines, period=14)
+                        atr_val, atr_pct = calculate_atr(klines, period=14)
                         if atr_val == 0: atr_val = cur_price * 0.015
                         
                         if '[GEMINI-AI]' in trigger_reason:
