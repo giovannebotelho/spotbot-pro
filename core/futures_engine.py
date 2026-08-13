@@ -295,7 +295,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     is_red_candle = cur_price < cur_open
                     
                     from core.futures_cvd_reader import evaluate_cvd
-                    cvd_delta, buy_ratio, cvd_direction = await evaluate_cvd(client, symbol)
+                    cvd_delta, buy_ratio, cvd_direction = 0, 0.5, None
+                    
+                    # Lazy Evaluation: Só busca o CVD (que consome muito peso da API) se a moeda tiver chance de dar trade (RSI extremo)
+                    if rsi < 35 or rsi > 65:
+                        cvd_delta, buy_ratio, cvd_direction = await evaluate_cvd(client, symbol)
                     
                     # Exaustão Extrema: Shortar o topo que rompeu a banda superior (independente se verde ou vermelho), ou Long no fundo.
                     if bb_upper and len(bb_upper) > 0 and bb_upper[-1] and cur_price >= bb_upper[-1]:
