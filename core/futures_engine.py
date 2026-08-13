@@ -222,6 +222,18 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 candle_patterns = check_candle_patterns(klines)
                 macd_current, signal_line_current = calculate_macd(closes)
                 
+                # Cálculo do Histograma MACD para detectar exaustão da força direcional
+                try:
+                    _exp1 = pd.Series(closes).ewm(span=12, adjust=False).mean()
+                    _exp2 = pd.Series(closes).ewm(span=26, adjust=False).mean()
+                    _macd_s = _exp1 - _exp2
+                    _sig_s = _macd_s.ewm(span=9, adjust=False).mean()
+                    _hist_s = _macd_s - _sig_s
+                    macd_hist_curr = _hist_s.iloc[-1]
+                    macd_hist_prev = _hist_s.iloc[-2]
+                except Exception:
+                    macd_hist_curr, macd_hist_prev = 0.0, 0.0
+                
                 # Análise de Volume Relativo (Pico recente)
                 vol_sma = pd.Series(volumes_rec).rolling(10).mean().tolist()[-1] if len(volumes_rec) >= 10 else 0
                 cur_vol = volumes_rec[-1]
@@ -353,6 +365,16 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             log(f"🛡️ [ANTI-FACA] Bloqueando LONG em {symbol} pois a vela de baixa é muito forte ({candle_body_pct:.2f}%). Aguardando exaustão!")
                             direction = None
                         
+                    elif direction == 'LONG' and macd_hist_curr > 0 and macd_hist_curr < macd_hist_prev:
+                        if '[PRICE ACTION]' not in trigger_reason and '[BAND-SNIPER' not in trigger_reason:
+                            log(f"🛡️ [MACD EXAUSTÃO] Bloqueando LONG em {symbol} pois a força compradora no MACD já está caindo (Histograma encolhendo).")
+                            direction = None
+                            
+                    elif direction == 'SHORT' and macd_hist_curr < 0 and macd_hist_curr > macd_hist_prev:
+                        if '[PRICE ACTION]' not in trigger_reason and '[BAND-SNIPER' not in trigger_reason:
+                            log(f"🛡️ [MACD EXAUSTÃO] Bloqueando SHORT em {symbol} pois a força vendedora no MACD já está caindo (Histograma encolhendo).")
+                            direction = None
+                            
                     elif direction == 'SHORT' and rsi > 78:
                         log(f"🛡️ [MOMENTUM EXTREMO] Bloqueando SHORT em {symbol} pois o RSI está parabólico (RSI: {rsi:.1f}).")
                         direction = None
