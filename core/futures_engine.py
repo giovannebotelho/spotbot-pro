@@ -236,10 +236,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 
                 # 1. Gemini AI Panic Scanner (Independente)
                 from services.futures_gemini_news import evaluate_news_sentiment
-                score, gemini_dir, reason = await evaluate_news_sentiment(symbol, log)
-                if gemini_dir in ['LONG', 'SHORT'] and (score <= 25 or score >= 80):
-                    direction = gemini_dir
-                    trigger_reason = f"[GEMINI-AI] Notícia Extrema ({score}): {reason}"
+                if has_volume_spike:
+                    score, gemini_dir, reason = await evaluate_news_sentiment(symbol, log)
+                    if gemini_dir in ['LONG', 'SHORT'] and (score <= 25 or score >= 80):
+                        direction = gemini_dir
+                        trigger_reason = f"[GEMINI-AI] Notícia Extrema ({score}): {reason}"
                     
                 # 1.5 Liquidation Hunter (Short Squeeze Detector)
                 if not direction:
@@ -508,6 +509,13 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     leverage = safe_leverage
                     notional = margin_usdt * leverage
                     
+                    # Limita o TP ao máximo absoluto de 8% de ROI
+                    max_tp_dist = cur_price * (0.08 / leverage)
+                    if direction == 'LONG':
+                        tp_price = min(tp_price, cur_price + max_tp_dist)
+                    else:
+                        tp_price = max(tp_price, cur_price - max_tp_dist)
+                    
                     # Dinamicamente buscar a precisão do ativo
                     info = symbols_info.get(symbol, {})
                     qty_precision = 3
@@ -554,7 +562,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             continue
                             
                         await futures_state.add(symbol, {
-                            'entry': entry_price_executed, 'tp': tp_price, 'sl': sl_price, 'direction': direction, 'qty': qty
+                            'entry': entry_price_executed, 'tp': tp_price, 'sl': sl_price, 'direction': direction, 'qty': qty, 'leverage': leverage
                         })
                         bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
                         

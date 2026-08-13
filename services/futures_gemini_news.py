@@ -15,7 +15,7 @@ async def evaluate_news_sentiment(symbol, log=print):
     """
     global _news_cache
     now = time.time()
-    if symbol in _news_cache and now - _news_cache[symbol]['timestamp'] < 300: # 5 minutos de cache
+    if symbol in _news_cache and now - _news_cache[symbol]['timestamp'] < 1800: # 30 minutos de cache
         return _news_cache[symbol]['score'], _news_cache[symbol]['direction'], _news_cache[symbol]['reason']
         
     try:

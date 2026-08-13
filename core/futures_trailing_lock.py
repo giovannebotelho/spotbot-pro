@@ -41,9 +41,10 @@ async def run_trailing_lock_monitor(client, log=print):
                 if not cur_price:
                     continue
                 
+                leverage = pos.get('leverage', 15)
+                
                 # Inicializa trackers de trailing se não existirem
-                if 'trailing_active' not in pos:
-                    pos['trailing_active'] = False
+                if 'peak_price' not in pos:
                     pos['peak_price'] = cur_price
                     
                 # Atualiza o pico
@@ -54,36 +55,29 @@ async def run_trailing_lock_monitor(client, log=print):
                     if cur_price < pos['peak_price'] or pos['peak_price'] == 0:
                         pos['peak_price'] = cur_price
                         
-                # Verifica distâncias
-                total_target_dist = abs(tp_price - entry_price)
-                if total_target_dist == 0: continue
+                # Calcula ROIs (em porcentagem)
+                if direction == 'LONG':
+                    cur_roi = ((cur_price - entry_price) / entry_price) * leverage * 100
+                    peak_roi = ((pos['peak_price'] - entry_price) / entry_price) * leverage * 100
+                else:
+                    cur_roi = ((entry_price - cur_price) / entry_price) * leverage * 100
+                    peak_roi = ((entry_price - pos['peak_price']) / entry_price) * leverage * 100
                 
-                cur_dist = abs(cur_price - entry_price)
-                
-                # Regra: Passou de 80% da meta
-                is_in_profit = (cur_price > entry_price) if direction == 'LONG' else (cur_price < entry_price)
-                
-                if is_in_profit and cur_dist >= (total_target_dist * 0.80):
-                    if not pos['trailing_active']:
-                        pos['trailing_active'] = True
-                        log(f"🎯 [TRAILING-LOCK] Ativado para {symbol}! Garantindo lucro no pico.")
-                        
-                # Se estiver ativo, verificar recuo de 0.50%
-                if pos['trailing_active']:
-                    peak = pos['peak_price']
-                    if direction == 'LONG':
-                        drawdown_price = peak * 0.9950
-                        if cur_price <= drawdown_price:
-                            log(f"⚡ [TRAILING-LOCK] Recuo detectado em {symbol} (Pico: {peak:.4f}, Atual: {cur_price:.4f}). Fechando a mercado!")
-                            await execute_trailing_close(client, symbol, direction, qty, log)
-                            # Remove localmente para não disparar de novo
-                            await futures_state.remove(symbol)
-                    else: # SHORT
-                        drawdown_price = peak * 1.0050
-                        if cur_price >= drawdown_price:
-                            log(f"⚡ [TRAILING-LOCK] Recuo detectado em {symbol} (Pico: {peak:.4f}, Atual: {cur_price:.4f}). Fechando a mercado!")
-                            await execute_trailing_close(client, symbol, direction, qty, log)
-                            await futures_state.remove(symbol)
+                # Regra 1: Take Profit Absoluto (8% ROI)
+                if cur_roi >= 8.0:
+                    log(f"🎯 [TAKE-PROFIT MAX] {symbol} atingiu o alvo de 8% de ROI! Fechando a mercado.")
+                    await execute_trailing_close(client, symbol, direction, qty, log)
+                    await futures_state.remove(symbol)
+                    continue
+                    
+                # Regra 2: Trailing Lock Dinâmico (Distância de 3% do Pico de ROI)
+                # Só ativamos o lock contínuo se o pico foi positivo (operação chegou a lucrar algo)
+                # ou se você quiser que ele atue desde o começo como um SL apertado. Vamos assumir que sempre acompanha o pico.
+                if (peak_roi - cur_roi) >= 3.0:
+                    log(f"⚡ [TRAILING-LOCK] Recuo detectado em {symbol}! (Pico ROI: {peak_roi:.2f}%, Atual ROI: {cur_roi:.2f}%). Fechando a mercado!")
+                    await execute_trailing_close(client, symbol, direction, qty, log)
+                    await futures_state.remove(symbol)
+                    continue
                             
         except Exception as e:
             log(f"⚠️ Erro no Trailing Lock Monitor: {e}")
