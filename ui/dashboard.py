@@ -298,8 +298,9 @@ async def update_data():
         if futures_usdt_val:
             try:
                 from core.futures_engine import get_futures_usdt_balance
-                fut_bal = await get_futures_usdt_balance(engine.client)
-                futures_usdt_val.text = f"${fut_bal:.2f}"
+                if getattr(engine, 'client', None) is not None:
+                    fut_bal = await get_futures_usdt_balance(engine.client)
+                    futures_usdt_val.text = f"${fut_bal:.2f}"
             except Exception:
                 pass
         

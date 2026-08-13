@@ -337,6 +337,14 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         log(f"🛡️ [CANDLE SHIELD] Bloqueando SHORT em {symbol} devido à vela forte de rejeição ({candle_patterns[0]}).")
                         direction = None
                         
+                    elif direction == 'SHORT' and rsi > 78:
+                        log(f"🛡️ [MOMENTUM EXTREMO] Bloqueando SHORT em {symbol} pois o RSI está parabólico (RSI: {rsi:.1f}).")
+                        direction = None
+                        
+                    elif direction == 'LONG' and rsi < 22:
+                        log(f"🛡️ [MOMENTUM EXTREMO] Bloqueando LONG em {symbol} pois o ativo está em queda livre (RSI: {rsi:.1f}).")
+                        direction = None
+                        
                     elif not has_volume_spike and '[GEMINI-AI]' not in trigger_reason:
                         log(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.")
                         direction = None
