@@ -299,18 +299,18 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     
                     # Exaustão Extrema: Shortar o topo que rompeu a banda superior (independente se verde ou vermelho), ou Long no fundo.
                     if bb_upper and len(bb_upper) > 0 and bb_upper[-1] and cur_price >= bb_upper[-1]:
-                        if rsi > 65:
+                        if rsi > 70:
                             tech_dir = 'SHORT'
                     elif bb_lower and len(bb_lower) > 0 and bb_lower[-1] and cur_price <= bb_lower[-1]:
-                        if rsi < 35:
+                        if rsi < 30:
                             tech_dir = 'LONG'
                             
                     # Smart Relaxation: Se o RSI aponta exaustão e o Tape Reading (CVD) mostra força contrária confirmada
                     if not tech_dir:
-                        if rsi < 40 and cvd_direction == 'LONG':
+                        if rsi < 35 and cvd_direction == 'LONG':
                             tech_dir = 'LONG'
                             log(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD comprador massivo. Validando LONG antecipado em {symbol}.")
-                        elif rsi > 60 and cvd_direction == 'SHORT':
+                        elif rsi > 65 and cvd_direction == 'SHORT':
                             tech_dir = 'SHORT'
                             log(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.")
                             
@@ -387,12 +387,12 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         log(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.")
                         direction = None
                         
-                    elif direction == 'LONG' and ema_dist_pct < 0.8 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
-                        log(f"🛡️ [EMA DIST] Bloqueando LONG em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%).")
+                    elif direction == 'LONG' and ema_dist_pct < 1.0 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
+                        log(f"🛡️ [EMA DIST] Bloqueando LONG em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido > 1.0%")
                         direction = None
                         
-                    elif direction == 'SHORT' and ema_dist_pct > -0.8 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
-                        log(f"🛡️ [EMA DIST] Bloqueando SHORT em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%).")
+                    elif direction == 'SHORT' and ema_dist_pct > -1.0 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
+                        log(f"🛡️ [EMA DIST] Bloqueando SHORT em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido < -1.0%")
                         direction = None
                         
                     elif direction == 'LONG' and btc_trend == 'BEAR' and symbol != 'BTCUSDT':
@@ -546,8 +546,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     leverage = safe_leverage
                     notional = margin_usdt * leverage
                     
-                    # Limita o TP ao máximo absoluto de 7% de ROI
-                    max_tp_dist = cur_price * (0.07 / leverage)
+                    # Limita o TP ao máximo absoluto de 6% de ROI
+                    max_tp_dist = cur_price * (0.06 / leverage)
                     if direction == 'LONG':
                         tp_price = min(tp_price, cur_price + max_tp_dist)
                     else:
