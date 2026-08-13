@@ -582,7 +582,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     except Exception as e:
                         log(f"❌ Erro ao abrir posição {direction} em {symbol}: {e}")
                         
-            await asyncio.sleep(5)
+            # Evita IP Ban da Binance (Weight Limit de 2400/min). Scan de 40 moedas consome 200 weight.
+            await asyncio.sleep(15)
             
         except Exception as e:
             log(f"⚠️ Erro no Motor de Futuros: {e}")
