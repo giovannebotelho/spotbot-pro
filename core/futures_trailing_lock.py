@@ -70,14 +70,21 @@ async def run_trailing_lock_monitor(client, log=print):
                     await futures_state.remove(symbol)
                     continue
                     
-                # Regra 2: Trailing Lock Dinâmico (Distância de 3% do Pico de ROI)
-                # Só ativamos o lock contínuo se o pico foi positivo (operação chegou a lucrar pelo menos 2% de ROI)
-                # Isso evita violinadas no início da operação atuando como um SL muito apertado.
-                if peak_roi >= 2.0 and (peak_roi - cur_roi) >= 3.0:
-                    log(f"⚡ [TRAILING-LOCK] Recuo detectado em {symbol}! (Pico ROI: {peak_roi:.2f}%, Atual ROI: {cur_roi:.2f}%). Fechando a mercado!")
-                    await execute_trailing_close(client, symbol, direction, qty, log)
-                    await futures_state.remove(symbol)
-                    continue
+                # Regra 2: Trailing Lock Dinâmico Flexível
+                if peak_roi >= 2.0:
+                    # Se o trade ainda está no positivo, o trailing é mais ágil (distância de 3%)
+                    if cur_roi >= 0:
+                        drawdown_limit = 3.0
+                    # Se o trade negativou, o trailing fica mais frouxo (distância de 7% do pico)
+                    # para evitar fechar a operação precocemente e dar espaço de respiro até o Stop Loss real (10%).
+                    else:
+                        drawdown_limit = 7.0
+                        
+                    if (peak_roi - cur_roi) >= drawdown_limit:
+                        log(f"⚡ [TRAILING-LOCK] Recuo detectado em {symbol}! (Pico: {peak_roi:.2f}%, Atual: {cur_roi:.2f}%, Limite: {drawdown_limit:.1f}%). Fechando!")
+                        await execute_trailing_close(client, symbol, direction, qty, log)
+                        await futures_state.remove(symbol)
+                        continue
                             
         except Exception as e:
             log(f"⚠️ Erro no Trailing Lock Monitor: {e}")
