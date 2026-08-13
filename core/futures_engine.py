@@ -3,7 +3,7 @@ from config.settings import TELEGRAM_CONFIG, TIMEZONE
 from core.futures_state import futures_state
 from services.binance_client import (
     setup_futures_margin, place_futures_order, place_futures_conditional_order,
-    get_futures_usdt_balance, get_futures_klines, get_futures_whale_ratio
+    get_futures_usdt_balance, get_futures_usdt_total_balance, get_futures_klines, get_futures_whale_ratio
 )
 from core.decision import get_precision
 from core.indicators import calculate_rsi, check_candle_patterns, calculate_macd, calculate_atr
@@ -496,14 +496,16 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         direction = None
 
                 if direction:
-                    # Re-avalia o saldo antes de entrar, pois operações anteriores no mesmo ciclo podem ter consumido a margem
-                    current_balance = await get_futures_usdt_balance(client)
-                    # 1. Dimensionamento Fixo (Saldo / 3 - 5% de segurança)
-                    margin_usdt = (current_balance / 3) * 0.95
-                    log(f"🏆 \033[1;36mFixed Slot Sizing\033[0m: Margem de trade alocada em \033[1;32m${margin_usdt:.2f} USDT\033[0m (1/3 do saldo Futuros).")
+                    # Re-avalia o saldo antes de entrar
+                    available_balance = await get_futures_usdt_balance(client)
+                    total_balance = await get_futures_usdt_total_balance(client)
                     
-                    if current_balance < margin_usdt:
-                        log(f"⚠️ Saldo atual ({current_balance:.2f}) menor que margem exigida ({margin_usdt:.2f}). Pausando scanner...")
+                    # 1. Dimensionamento Fixo (Saldo TOTAL / 3 - 5% de segurança)
+                    margin_usdt = (total_balance / 3) * 0.95
+                    log(f"🏆 \033[1;36mFixed Slot Sizing\033[0m: Margem de trade alocada em \033[1;32m${margin_usdt:.2f} USDT\033[0m (1/3 do saldo TOTAL de ${total_balance:.2f}).")
+                    
+                    if available_balance < margin_usdt:
+                        log(f"⚠️ Saldo livre ({available_balance:.2f}) menor que margem exigida por lote ({margin_usdt:.2f}). Limite de trades simultâneos atingido.")
                         break
                         
                     initial_leverage = 15

@@ -151,6 +151,24 @@ async def get_futures_usdt_balance(client):
             print(f"⚠️ Erro ao buscar saldo USDT Futuros: {e}")
         return 0.0
 
+async def get_futures_usdt_total_balance(client):
+    """Obtém o saldo TOTAL de USDT na conta de Futuros (disponível + alocado em ordens/posições)."""
+    try:
+        if hasattr(client, 'session') and client.session:
+            client.session.headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json",
+            })
+            
+        balances = await client.futures_account_balance()
+        for asset in balances:
+            if asset['asset'] == 'USDT':
+                # Retorna o saldo total da carteira para cálculo estático de lotes
+                return float(asset.get('balance', 0.0))
+        return 0.0
+    except Exception as e:
+        return 0.0
+
 async def get_futures_whale_ratio(client, symbol, period='15m'):
     """
     Busca o 'Top Trader Long/Short Ratio' (Positions) da Binance Futures.
