@@ -509,8 +509,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     leverage = safe_leverage
                     notional = margin_usdt * leverage
                     
-                    # Limita o TP ao máximo absoluto de 8% de ROI
-                    max_tp_dist = cur_price * (0.08 / leverage)
+                    # Limita o TP ao máximo absoluto de 7% de ROI
+                    max_tp_dist = cur_price * (0.07 / leverage)
                     if direction == 'LONG':
                         tp_price = min(tp_price, cur_price + max_tp_dist)
                     else:

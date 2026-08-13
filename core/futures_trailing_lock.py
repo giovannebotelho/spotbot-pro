@@ -63,15 +63,15 @@ async def run_trailing_lock_monitor(client, log=print):
                     cur_roi = ((entry_price - cur_price) / entry_price) * leverage * 100
                     peak_roi = ((entry_price - pos['peak_price']) / entry_price) * leverage * 100
                 
-                # Regra 1: Take Profit Absoluto (8% ROI)
-                if cur_roi >= 8.0:
-                    log(f"🎯 [TAKE-PROFIT MAX] {symbol} atingiu o alvo de 8% de ROI! Fechando a mercado.")
+                # Regra 1: Take Profit Absoluto (7% ROI)
+                if cur_roi >= 7.0:
+                    log(f"🎯 [TAKE-PROFIT MAX] {symbol} atingiu o alvo de 7% de ROI! Fechando a mercado.")
                     await execute_trailing_close(client, symbol, direction, qty, log)
                     await futures_state.remove(symbol)
                     continue
                     
                 # Regra 2: Trailing Lock Dinâmico Flexível
-                if peak_roi >= 2.0:
+                if peak_roi >= 3.0:
                     # Se o trade ainda está no positivo, o trailing é mais ágil (distância de 3%)
                     if cur_roi >= 0:
                         drawdown_limit = 3.0
