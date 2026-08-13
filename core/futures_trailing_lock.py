@@ -74,17 +74,19 @@ async def run_trailing_lock_monitor(client, log=print):
                 if peak_roi >= 3.0:
                     # Se o trade ainda está no positivo, o trailing é mais ágil (distância de 3%)
                     if cur_roi >= 0:
-                        drawdown_limit = 3.0
-                    # Se o trade negativou, o trailing fica mais frouxo (distância de 7% do pico)
-                    # para evitar fechar a operação precocemente e dar espaço de respiro até o Stop Loss real (10%).
-                    else:
-                        drawdown_limit = 7.0
-                        
-                    if (peak_roi - cur_roi) >= drawdown_limit:
-                        log(f"⚡ [TRAILING-LOCK] Recuo detectado em {symbol}! (Pico: {peak_roi:.2f}%, Atual: {cur_roi:.2f}%, Limite: {drawdown_limit:.1f}%). Fechando!")
-                        await execute_trailing_close(client, symbol, direction, qty, log)
-                        await futures_state.remove(symbol)
-                        continue
+                        if (peak_roi - cur_roi) >= 3.0:
+                            log(f"⚡ [TRAILING-LOCK] Recuo detectado no lucro (Pico: {peak_roi:.2f}%, Atual: {cur_roi:.2f}%). Garantindo a operação!")
+                            await execute_trailing_close(client, symbol, direction, qty, log)
+                            await futures_state.remove(symbol)
+                            continue
+                            
+                # Regra 3: Tolerância Máxima Negativa
+                # Para evitar violinar em pequenos recuos negativos (-1%, -2%), deixamos respirar até -9% de ROI
+                if cur_roi <= -9.0:
+                    log(f"⚡ [STOP PREVENTIVO] Trade atingiu tolerância máxima negativa (Atual: {cur_roi:.2f}%). Fechando antes do SL rígido!")
+                    await execute_trailing_close(client, symbol, direction, qty, log)
+                    await futures_state.remove(symbol)
+                    continue
                             
         except Exception as e:
             log(f"⚠️ Erro no Trailing Lock Monitor: {e}")
