@@ -338,6 +338,21 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         log(f"🛡️ [CANDLE SHIELD] Bloqueando SHORT em {symbol} devido à vela forte de rejeição ({candle_patterns[0]}).")
                         direction = None
                         
+                    # Filtro Anti-Foguete / Anti-Faca Caindo (Impede entrar contra uma barra de força absoluta)
+                    is_green_candle = cur_price > cur_open
+                    is_red_candle = cur_price < cur_open
+                    candle_body_pct = (abs(cur_price - cur_open) / cur_open) * 100
+                    
+                    if direction == 'SHORT' and is_green_candle and candle_body_pct > 0.35:
+                        if '[PRICE ACTION]' not in trigger_reason:
+                            log(f"🛡️ [ANTI-FOGUETE] Bloqueando SHORT em {symbol} pois a vela de alta é muito forte ({candle_body_pct:.2f}%). Aguardando exaustão!")
+                            direction = None
+                            
+                    elif direction == 'LONG' and is_red_candle and candle_body_pct > 0.35:
+                        if '[PRICE ACTION]' not in trigger_reason:
+                            log(f"🛡️ [ANTI-FACA] Bloqueando LONG em {symbol} pois a vela de baixa é muito forte ({candle_body_pct:.2f}%). Aguardando exaustão!")
+                            direction = None
+                        
                     elif direction == 'SHORT' and rsi > 78:
                         log(f"🛡️ [MOMENTUM EXTREMO] Bloqueando SHORT em {symbol} pois o RSI está parabólico (RSI: {rsi:.1f}).")
                         direction = None
