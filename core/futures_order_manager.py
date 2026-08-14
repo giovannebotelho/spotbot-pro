@@ -284,45 +284,74 @@ async def handle_user_data_stream_event(client, db, event, log):
                 await register_futures_trade(client, db, symbol, direction, entry_price, exit_price, qty, log, realized_pnl)
 
 async def run_fallback_position_monitor(client, db, log):
-    """Fallback de segurança que roda a cada 5 segundos para limpar posições se o WS falhar."""
+    """Fallback de segurança que roda a cada 5 segundos para limpar posições se o WS falhar, e a cada 60s atua como Garbage Collector global."""
     from core.futures_engine import bot_futures_status_data
     import asyncio
     from core.futures_state import futures_state
     
+    cycle_count = 0
+    
     while True:
         await asyncio.sleep(5)
+        cycle_count += 1
         active_futures_positions = await futures_state.get_all()
         symbols_to_check = list(active_futures_positions.keys())
-        if not symbols_to_check:
-            continue
-            
-        try:
-            positions = await client.futures_position_information()
-            for pos in positions:
-                symbol = pos['symbol']
-                if symbol in symbols_to_check and float(pos['positionAmt']) == 0.0:
-                    # Posição fechou mas o WS não pegou!
-                    log(f"⚠️ [FALLBACK] Orphan order detected by fallback loop and cancelled para {symbol}.")
-                    
-                    try:
-                        await client.futures_cancel_all_open_orders(symbol=symbol)
-                    except: pass
-                    
-                    pos_data = await futures_state.remove(symbol)
-                    bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
-                    
-                    if pos_data:
-                        # Busca o PnL exato das ordens recentes
-                        realized_pnl = 0.0
-                        exit_price = pos_data.get('entry', 0.0)
+        
+        # 1. Fallback tradicional: checa se posições ativas fecharam "escondidas"
+        if symbols_to_check:
+            try:
+                positions = await client.futures_position_information()
+                for pos in positions:
+                    symbol = pos['symbol']
+                    if symbol in symbols_to_check and float(pos['positionAmt']) == 0.0:
+                        # Posição fechou mas o WS não pegou!
+                        log(f"⚠️ [FALLBACK] Posição finalizada detectada silenciosamente em {symbol}. Limpando ordens...")
+                        
                         try:
-                            recent_trades = await client.futures_account_trades(symbol=symbol, limit=5)
-                            closing_trades = [t for t in recent_trades if float(t.get('realizedPnl', 0)) != 0]
-                            if closing_trades:
-                                realized_pnl = sum(float(t['realizedPnl']) for t in closing_trades)
-                                exit_price = float(closing_trades[-1]['price'])
+                            await client.futures_cancel_all_open_orders(symbol=symbol)
                         except: pass
                         
-                        await register_futures_trade(client, db, symbol, pos_data['direction'], pos_data['entry'], exit_price, pos_data['qty'], log, realized_pnl)
-        except Exception as e:
-            log(f"⚠️ Erro no Fallback Monitor: {e}")
+                        pos_data = await futures_state.remove(symbol)
+                        bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
+                        
+                        if pos_data:
+                            # Busca o PnL exato das ordens recentes
+                            realized_pnl = 0.0
+                            exit_price = pos_data.get('entry', 0.0)
+                            try:
+                                recent_trades = await client.futures_account_trades(symbol=symbol, limit=5)
+                                closing_trades = [t for t in recent_trades if float(t.get('realizedPnl', 0)) != 0]
+                                if closing_trades:
+                                    realized_pnl = sum(float(t['realizedPnl']) for t in closing_trades)
+                                    exit_price = float(closing_trades[-1]['price'])
+                            except: pass
+                            
+                            await register_futures_trade(client, db, symbol, pos_data['direction'], pos_data['entry'], exit_price, pos_data['qty'], log, realized_pnl)
+            except Exception as e:
+                log(f"⚠️ Erro no Fallback Monitor Principal: {e}")
+
+        # 2. Garbage Collector Global (A cada 60 segundos)
+        if cycle_count >= 12:
+            cycle_count = 0
+            try:
+                open_orders = await client.futures_get_open_orders() # Weight 40
+                if open_orders:
+                    # Coleta símbolos com ordens abertas
+                    symbols_with_orders = list(set(order['symbol'] for order in open_orders))
+                    
+                    if symbols_with_orders:
+                        # Precisamos saber se esses símbolos têm posição aberta real, para não fechar ordens de posições válidas
+                        positions_info = await client.futures_position_information()
+                        active_positions_map = {p['symbol']: float(p['positionAmt']) for p in positions_info}
+                        
+                        for sym in symbols_with_orders:
+                            # Se o bot NÃO estiver acompanhando essa moeda E ela NÃO tiver posição aberta na exchange
+                            if sym not in symbols_to_check and active_positions_map.get(sym, 0.0) == 0.0:
+                                log(f"🧹 [GARBAGE COLLECTOR] Ordens condicionais residuais (fantasmas) detectadas em {sym}! Limpando a exchange...")
+                                try:
+                                    await client.futures_cancel_all_open_orders(symbol=sym)
+                                except Exception as cancel_err:
+                                    log(f"⚠️ Erro ao limpar ordens residuais em {sym}: {cancel_err}")
+            except Exception as e:
+                if "-1003" not in str(e): # Ignora se for apenas aviso de rate limit
+                    log(f"⚠️ Erro no Garbage Collector Global: {e}")
