@@ -508,17 +508,14 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         available_balance = await get_futures_usdt_balance(client)
                         total_balance = await get_futures_usdt_total_balance(client)
                     
-                        # 1. Dimensionamento Fixo (Saldo TOTAL / 3 - 5% de segurança)
-                        margin_usdt = (total_balance / 3) * 0.95
-                        log(f"🏆 \033[1;36mFixed Slot Sizing\033[0m: Margem de trade alocada em \033[1;32m${margin_usdt:.2f} USDT\033[0m (1/3 do saldo TOTAL de ${total_balance:.2f}).")
-                    
-                        if available_balance < margin_usdt:
-                            log(f"⚠️ Saldo livre ({available_balance:.2f}) menor que margem exigida por lote ({margin_usdt:.2f}). Limite de trades simultâneos atingido.")
-                            break
+                        # 1. Dimensionamento Fixo por Risco (Fase 2)
+                        risk_pct = 0.02 # 2% da banca em risco por trade
+                        risk_amount = total_balance * risk_pct
+                        log(f"🏆 \033[1;36mFixed Risk Sizing\033[0m: Risco aceito de \033[1;32m${risk_amount:.2f} USDT\033[0m (2% da banca).")
                         
                         initial_leverage = 15
                     
-                        # 2. Definição do TP/SL (Dinâmico)
+                        # 2. Definição do TP/SL (Dinâmico Hedge Fund)
                         if '[BAND-SNIPER 15M]' in trigger_reason:
                             tp_price = bot_futures_status_data.pop('sniper_tp')
                             sl_price = bot_futures_status_data.pop('sniper_sl')
@@ -536,12 +533,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                                 tp_dist = atr_val * 0.5
                                 sl_dist = atr_val * 0.3
                             else:
-                                tp_dist = atr_val * 1.0  # Alvo 1x ATR
-                                sl_dist = atr_val * 1.5  # Stop Seguro 1.5x ATR
-                            
-                            # Teto inicial de 10%
-                            max_sl_dist_initial = cur_price * (0.10 / initial_leverage)
-                            sl_dist = min(sl_dist, max_sl_dist_initial)
+                                tp_dist = atr_val * 3.0  # Alvo Otimizado 3.0x ATR
+                                sl_dist = atr_val * 2.5  # Stop Otimizado 2.5x ATR
                             
                             if direction == 'LONG':
                                 tp_price = cur_price + tp_dist
@@ -558,21 +551,26 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             continue # Rejeitado
                         
                         leverage = safe_leverage
-                        notional = margin_usdt * leverage
-                    
-                        # Limita o TP ao máximo absoluto de 5.5% de ROI
-                        max_tp_dist = cur_price * (0.055 / leverage)
-                        if direction == 'LONG':
-                            tp_price = min(tp_price, cur_price + max_tp_dist)
-                        else:
-                            tp_price = max(tp_price, cur_price - max_tp_dist)
+                        # Limites Absolutos Otimizados (Removido hardcap de 5.5% e 10% para deixar o ATR fluir)
+                        # A matemática provou que cortar os lucros e as folgas de stop cedo demais estraga a curva de capital.
+                        
+                        # Calcula a distância do SL e a Notional necessária para perder apenas o risk_amount
+                        sl_price_diff = abs(cur_price - sl_price)
+                        if sl_price_diff == 0:
+                            continue
                             
-                        # Limita o SL absoluto em 10% de ROI (Recálculo pós-alavancagem)
-                        max_sl_dist = cur_price * (0.10 / leverage)
-                        if direction == 'LONG':
-                            sl_price = max(sl_price, cur_price - max_sl_dist)
-                        else:
-                            sl_price = min(sl_price, cur_price + max_sl_dist)
+                        # Quantidade = Risco em $ / Distância do SL em $
+                        notional_raw = (risk_amount / sl_price_diff) * cur_price
+                        
+                        # Limita a exposição máxima caso o stop fique muito apertado
+                        max_notional = total_balance * 10 # Exp no máximo 10x a banca
+                        notional = min(notional_raw, max_notional)
+                        
+                        # A alavancagem necessária é apenas para acomodar o Notional
+                        margin_required = notional / leverage
+                        if available_balance < margin_required:
+                            log(f"⚠️ Saldo insuficiente para cobrir margem exigida do Risk Sizing. (Req: ${margin_required:.2f})")
+                            break
                     
                         # Dinamicamente buscar a precisão do ativo
                         info = symbols_info.get(symbol, {})

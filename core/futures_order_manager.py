@@ -95,26 +95,7 @@ async def monitor_futures_lifecycle(
                                     
                             bot_futures_status_data['price'] = cur_price
                             
-                            # Lógica de Trailing Stop Lock para Futuros
-                            if position_side == 'LONG':
-                                tp_distance = tp_price - entry_price
-                                trigger_price = entry_price + (tp_distance * 0.75)
-                                if highest_price >= trigger_price and cur_price < highest_price * 0.998:
-                                    log(f"🔒 Trailing Lock Acionado (LONG)! Vendendo a mercado...")
-                                    await close_futures_position(client, symbol, 'SELL', executed_qty, tp_order_id, sl_order_id, log)
-                                    await register_futures_trade(client, db, symbol, 'LONG', entry_price, cur_price, executed_qty, log)
-                                    checker_task.cancel()
-                                    break
-                            else:
-                                # SHORT
-                                tp_distance = entry_price - tp_price
-                                trigger_price = entry_price - (tp_distance * 0.75)
-                                if lowest_price <= trigger_price and cur_price > lowest_price * 1.002:
-                                    log(f"🔒 Trailing Lock Acionado (SHORT)! Comprando a mercado...")
-                                    await close_futures_position(client, symbol, 'BUY', executed_qty, tp_order_id, sl_order_id, log)
-                                    await register_futures_trade(client, db, symbol, 'SHORT', entry_price, cur_price, executed_qty, log)
-                                    checker_task.cancel()
-                                    break
+                            # Removido Trailing Stop Lock para aderir ao Grid Search Otimizado (Fase 2)
                     except asyncio.TimeoutError:
                         continue # Apenas continua esperando, sem falhar
         except Exception as ws_err:
@@ -225,37 +206,19 @@ async def place_futures_trade_with_protection(client, symbol, side, qty, tp_pric
         # Determina lado de saída
         exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
-        # 2. Ordem Trailing Stop (Substitui o Take Profit Fixo)
-        tp_order = await client.futures_create_order(
-            symbol=symbol, side=exit_side, type='TRAILING_STOP_MARKET',
-            callbackRate='1.5', quantity=qty, reduceOnly='true'
-        )
-        
-        # 3. Ordem SL
+        # 2. Ordem SL (Stop Market com closePosition)
         sl_order = await client.futures_create_order(
             symbol=symbol, side=exit_side, type='STOP_MARKET',
-            stopPrice=str(sl_price), closePosition='true', timeInForce='GTC'
+            stopPrice=sl_price, closePosition='true'
         )
         
-        # 4. Hard Take Profit
-        hard_tp_price = tp_price
-            
-        # Deduz a precisão correta através do sl_price que já vem com o arredondamento da exchange
-        sl_str = str(sl_price)
-        precision = len(sl_str.split('.')[1]) if '.' in sl_str else 0
-        
-        hard_tp_price = round(hard_tp_price, precision)
-        
-        # Formata explicitamente para garantir que Python não adicione notação científica
-        format_str = f"{{:.{precision}f}}"
-        hard_tp_price_str = format_str.format(hard_tp_price)
-        
-        hard_tp_order = await client.futures_create_order(
+        # 3. Ordem TP (Take Profit Market com closePosition)
+        tp_order = await client.futures_create_order(
             symbol=symbol, side=exit_side, type='TAKE_PROFIT_MARKET',
-            stopPrice=hard_tp_price_str, closePosition='true', timeInForce='GTC'
+            stopPrice=tp_price, closePosition='true'
         )
         
-        log(f"✅ [FUTUROS] Posição {side} aberta em {symbol} a ${entry_price:.4f} (TP: ${hard_tp_price:.4f}, SL: ${sl_price:.4f})")
+        log(f"✅ [FUTUROS] Posição {side} aberta em {symbol} a ${entry_price:.4f} (TP: ${tp_price}, SL: ${sl_price})")
         return entry_order, tp_order, sl_order, entry_price
     except Exception as e:
         log(f"⚠️ Erro ao posicionar trade em {symbol}: {e}")
