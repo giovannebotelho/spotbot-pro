@@ -420,8 +420,9 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             if klines_1h and len(klines_1h) >= 20:
                                 import pandas as pd
                                 closes_1h = [float(k[4]) for k in klines_1h]
-                                ema20_1h = pd.Series(closes_1h).ewm(span=20, adjust=False).mean().tolist()[-1]
-                                price_1h = closes_1h[-1]
+                                # Avalia com base no último candle FECHADO ([-2]) para evitar fakeouts
+                                ema20_1h = pd.Series(closes_1h[:-1]).ewm(span=20, adjust=False).mean().tolist()[-1]
+                                price_1h = closes_1h[-2]
                             
                                 if direction == 'LONG' and price_1h < ema20_1h:
                                     log(f"🛡️ [MTF] Bloqueando LONG em {symbol}. Preço no 1H (${price_1h:.4f}) está abaixo da EMA20 (${ema20_1h:.4f}).")
@@ -533,11 +534,14 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         
                             if '[GEMINI-AI]' in trigger_reason:
                                 tp_dist = atr_val * 0.5
+                                sl_dist = atr_val * 0.3
                             else:
                                 tp_dist = atr_val * 1.0  # Alvo 1x ATR
+                                sl_dist = atr_val * 1.5  # Stop Seguro 1.5x ATR
                             
-                            # Hardcode inicial do SL para 7%
-                            sl_dist = cur_price * (0.07 / initial_leverage)
+                            # Teto inicial de 10%
+                            max_sl_dist_initial = cur_price * (0.10 / initial_leverage)
+                            sl_dist = min(sl_dist, max_sl_dist_initial)
                             
                             if direction == 'LONG':
                                 tp_price = cur_price + tp_dist
@@ -563,12 +567,12 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         else:
                             tp_price = max(tp_price, cur_price - max_tp_dist)
                             
-                        # Fixa o SL absoluto em 7% de ROI
-                        max_sl_dist = cur_price * (0.07 / leverage)
+                        # Limita o SL absoluto em 10% de ROI (Recálculo pós-alavancagem)
+                        max_sl_dist = cur_price * (0.10 / leverage)
                         if direction == 'LONG':
-                            sl_price = cur_price - max_sl_dist
+                            sl_price = max(sl_price, cur_price - max_sl_dist)
                         else:
-                            sl_price = cur_price + max_sl_dist
+                            sl_price = min(sl_price, cur_price + max_sl_dist)
                     
                         # Dinamicamente buscar a precisão do ativo
                         info = symbols_info.get(symbol, {})

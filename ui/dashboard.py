@@ -299,8 +299,10 @@ async def update_data():
             try:
                 from core.futures_engine import get_futures_usdt_balance
                 if getattr(engine, 'client', None) is not None:
-                    fut_bal = await get_futures_usdt_balance(engine.client)
-                    futures_usdt_val.text = f"${fut_bal:.2f}"
+                    # Verifica se a sessão do client não foi fechada pelo usuário parando o bot
+                    if getattr(engine.client, 'session', None) is not None and getattr(engine.client.session, 'closed', False) == False:
+                        fut_bal = await get_futures_usdt_balance(engine.client)
+                        futures_usdt_val.text = f"${fut_bal:.2f}"
             except Exception:
                 pass
         
