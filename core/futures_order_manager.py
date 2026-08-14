@@ -207,6 +207,10 @@ async def register_futures_trade(client, db, symbol, direction, entry, exit, qty
 async def place_futures_trade_with_protection(client, symbol, side, qty, tp_price, sl_price, leverage, log):
     """Coloca ordem primária e as ordens condicionais de proteção (TP/SL)."""
     try:
+        # 0. Clean Slate: Cancela TODAS as ordens fantasmas pendentes dessa moeda antes de entrar
+        log(f"🧹 [PRÉ-TRADE] Limpando ordens antigas de {symbol} antes da entrada...")
+        await robust_cancel_all_orders(client, symbol, log)
+        
         # 1. Ordem de Entrada
         entry_order = await client.futures_create_order(
             symbol=symbol, side=side, type='MARKET', quantity=qty

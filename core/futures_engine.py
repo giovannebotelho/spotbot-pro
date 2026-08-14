@@ -650,6 +650,27 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
     finally:
         bot_futures_running = False
         log("🛑 Encerrando tarefas em segundo plano do Motor de Futuros...")
+        
+        # [GRACEFUL SHUTDOWN] Limpa ordens remanescentes antes de desligar
+        try:
+            log("🧹 [SHUTDOWN] Varrendo ordens órfãs (Graceful Shutdown)...")
+            open_orders = await client.futures_get_open_orders()
+            if open_orders:
+                symbols_with_orders = list(set(order['symbol'] for order in open_orders))
+                positions_info = await client.futures_position_information()
+                active_positions_map = {p['symbol']: float(p['positionAmt']) for p in positions_info}
+                
+                from core.futures_order_manager import robust_cancel_all_orders
+                active_states = await futures_state.get_all()
+                for sym in symbols_with_orders:
+                    # Se não tem posição ativa na exchange E não está no state ativo
+                    if active_positions_map.get(sym, 0.0) == 0.0 and sym not in active_states:
+                        log(f"🧹 [SHUTDOWN] Ordem fantasma apagada em {sym}")
+                        await robust_cancel_all_orders(client, sym, log)
+        except Exception as e:
+            if "-1003" not in str(e):
+                log(f"⚠️ Erro no Graceful Shutdown: {e}")
+
         for task in futures_bg_tasks:
             if not task.done():
                 task.cancel()
