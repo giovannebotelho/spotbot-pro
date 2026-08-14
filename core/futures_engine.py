@@ -111,11 +111,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             log(f"⚠️ Aviso ao carregar klines no State Recovery Futuros: {k_err}")
 
                         log(f"🛡️ Retomando monitoramento de \033[1;33m{rec_symbol}\033[0m sem cancelar a operação...")
-                        asyncio.create_task(monitor_futures_lifecycle(
+                        futures_bg_tasks.append(asyncio.create_task(monitor_futures_lifecycle(
                             client, bsm, rec_symbol, direction, entry_price, qty,
                             tp_order.get('algoId'), sl_order.get('algoId'), tp_price, sl_price, db,
                             bot_futures_status_data, log, status
-                        ))
+                        )))
                         if TELEGRAM_CONFIG.get('bot_token') and TELEGRAM_CONFIG.get('chat_id'):
                             asyncio.create_task(send_telegram_message(
                                 TELEGRAM_CONFIG['bot_token'], TELEGRAM_CONFIG['chat_id'],
@@ -533,10 +533,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         
                             if '[GEMINI-AI]' in trigger_reason:
                                 tp_dist = atr_val * 0.5
-                                sl_dist = atr_val * 0.3
                             else:
                                 tp_dist = atr_val * 1.0  # Alvo 1x ATR
-                                sl_dist = atr_val * 1.5  # Stop Seguro 1.5x ATR
+                            
+                            # Hardcode inicial do SL para 7%
+                            sl_dist = cur_price * (0.07 / initial_leverage)
                             
                             if direction == 'LONG':
                                 tp_price = cur_price + tp_dist
@@ -561,6 +562,13 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             tp_price = min(tp_price, cur_price + max_tp_dist)
                         else:
                             tp_price = max(tp_price, cur_price - max_tp_dist)
+                            
+                        # Fixa o SL absoluto em 7% de ROI
+                        max_sl_dist = cur_price * (0.07 / leverage)
+                        if direction == 'LONG':
+                            sl_price = cur_price - max_sl_dist
+                        else:
+                            sl_price = cur_price + max_sl_dist
                     
                         # Dinamicamente buscar a precisão do ativo
                         info = symbols_info.get(symbol, {})
