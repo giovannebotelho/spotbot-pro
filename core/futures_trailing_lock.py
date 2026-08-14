@@ -63,9 +63,9 @@ async def run_trailing_lock_monitor(client, log=print):
                     cur_roi = ((entry_price - cur_price) / entry_price) * leverage * 100
                     peak_roi = ((entry_price - pos['peak_price']) / entry_price) * leverage * 100
                 
-                # Regra 1: Take Profit Absoluto (6% ROI)
-                if cur_roi >= 6.0:
-                    log(f"🎯 [TAKE-PROFIT MAX] {symbol} atingiu o alvo de 6% de ROI! Fechando a mercado.")
+                # Regra 1: Take Profit Absoluto (5.5% ROI)
+                if cur_roi >= 5.5:
+                    log(f"🎯 [TAKE-PROFIT MAX] {symbol} atingiu o alvo de 5.5% de ROI! Fechando a mercado.")
                     await execute_trailing_close(client, symbol, direction, qty, log)
                     await futures_state.remove(symbol)
                     continue
