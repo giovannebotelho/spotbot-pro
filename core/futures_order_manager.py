@@ -135,13 +135,27 @@ async def monitor_futures_lifecycle(
     bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
     return
 
-async def close_futures_position(client, symbol, side, qty, tp_order, sl_order, log):
-    """Fecha a posição a mercado e cancela todas as ordens orfãs."""
+async def robust_cancel_all_orders(client, symbol, log):
     try:
         await client.futures_cancel_all_open_orders(symbol=symbol)
-        log(f"🧹 [CLEANUP] Todas as ordens abertas para {symbol} foram canceladas.")
+    except Exception: pass
+    
+    try:
+        open_orders = await client.futures_get_open_orders(symbol=symbol)
+        for order in open_orders:
+            try:
+                await client.futures_cancel_order(symbol=symbol, orderId=order['orderId'])
+            except Exception: pass
+        if open_orders:
+            log(f"🧹 [CLEANUP EXTREMO] Forçada a remoção de {len(open_orders)} ordens fantasmas de {symbol}.")
+        else:
+            log(f"🧹 [CLEANUP] Todas as ordens abertas para {symbol} foram canceladas.")
     except Exception as e:
-        log(f"⚠️ Erro ao cancelar ordens pendentes de {symbol}: {e}")
+        log(f"⚠️ Erro ao limpar ordens órfãs extremas de {symbol}: {e}")
+
+async def close_futures_position(client, symbol, side, qty, tp_order, sl_order, log):
+    """Fecha a posição a mercado e cancela todas as ordens orfãs."""
+    await robust_cancel_all_orders(client, symbol, log)
     
     if qty > 0:
         try:
@@ -243,7 +257,7 @@ async def place_futures_trade_with_protection(client, symbol, side, qty, tp_pric
         log(f"⚠️ Erro ao posicionar trade em {symbol}: {e}")
         # Tentativa de cleanup caso falhe no meio
         try:
-            await client.futures_cancel_all_open_orders(symbol=symbol)
+            await robust_cancel_all_orders(client, symbol, log)
             await client.futures_create_order(symbol=symbol, side='SELL' if side == 'BUY' else 'BUY', type='MARKET', quantity=qty, reduceOnly='true')
         except:
             pass
@@ -267,10 +281,7 @@ async def handle_user_data_stream_event(client, db, event, log):
                 bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
                 
                 log(f"🎯 [UDS] Execução detectada para {symbol} ({status}). Limpando ordens órfãs...")
-                try:
-                    await client.futures_cancel_all_open_orders(symbol=symbol)
-                except Exception as e:
-                    log(f"⚠️ Aviso ao cancelar ordens de {symbol}: {e}")
+                await robust_cancel_all_orders(client, symbol, log)
                 
                 realized_pnl = float(order.get('rp', 0))
                 exit_price = float(order.get('ap', 0))
@@ -307,9 +318,7 @@ async def run_fallback_position_monitor(client, db, log):
                         # Posição fechou mas o WS não pegou!
                         log(f"⚠️ [FALLBACK] Posição finalizada detectada silenciosamente em {symbol}. Limpando ordens...")
                         
-                        try:
-                            await client.futures_cancel_all_open_orders(symbol=symbol)
-                        except: pass
+                        await robust_cancel_all_orders(client, symbol, log)
                         
                         pos_data = await futures_state.remove(symbol)
                         bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
@@ -348,10 +357,7 @@ async def run_fallback_position_monitor(client, db, log):
                             # Se o bot NÃO estiver acompanhando essa moeda E ela NÃO tiver posição aberta na exchange
                             if sym not in symbols_to_check and active_positions_map.get(sym, 0.0) == 0.0:
                                 log(f"🧹 [GARBAGE COLLECTOR] Ordens condicionais residuais (fantasmas) detectadas em {sym}! Limpando a exchange...")
-                                try:
-                                    await client.futures_cancel_all_open_orders(symbol=sym)
-                                except Exception as cancel_err:
-                                    log(f"⚠️ Erro ao limpar ordens residuais em {sym}: {cancel_err}")
+                                await robust_cancel_all_orders(client, sym, log)
             except Exception as e:
                 if "-1003" not in str(e): # Ignora se for apenas aviso de rate limit
                     log(f"⚠️ Erro no Garbage Collector Global: {e}")

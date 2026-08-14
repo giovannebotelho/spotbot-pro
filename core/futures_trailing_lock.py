@@ -2,6 +2,7 @@ import asyncio
 import time
 
 from core.futures_state import futures_state
+from core.futures_order_manager import get_futures_order_details, robust_cancel_all_orders
 
 async def run_trailing_lock_monitor(client, log=print):
     """
@@ -98,10 +99,7 @@ async def execute_trailing_close(client, symbol, direction, qty, log):
         side_exit = 'SELL' if direction == 'LONG' else 'BUY'
         
         # 1. Cancela TP/SL antigos para evitar órfãs e liberar margem ANTES de fechar
-        try:
-            await client.futures_cancel_all_open_orders(symbol=symbol)
-        except Exception as e:
-            log(f"⚠️ Aviso ao cancelar ordens pendentes de {symbol}: {e}")
+        await robust_cancel_all_orders(client, symbol, log)
         
         # 2. Envia a mercado
         try:
