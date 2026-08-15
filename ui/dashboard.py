@@ -757,6 +757,8 @@ async def index():
                     ui.image('/assets/logo.png').classes('w-6 h-6 rounded-md shadow-md')
                     ui.label('SPOTBOT PRO v7.0').classes('font-bold tracking-wider text-white text-xs')
                     ui.label('v7.0 HEDGEFUND').classes('text-[0.55rem] font-bold text-sky-400/80 tracking-widest hidden sm:inline')
+                    if settings.PAPER_TRADING_MODE:
+                        ui.label('🟡 PAPER TRADING (TESTNET)').classes('bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 rounded-full px-2 py-0.5 text-[0.6rem] font-bold ml-2 shadow-[0_0_10px_rgba(234,179,8,0.3)]')
                 
                 # Container do Marquee
                 with ui.element('div').classes('hidden md:flex flex-1 mx-3 overflow-hidden relative h-full items-center min-w-0'):

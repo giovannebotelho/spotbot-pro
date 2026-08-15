@@ -24,6 +24,10 @@ API_KEYS = {
         'key': clean_env('testnet_spot_api_key', ''),
         'secret': clean_env('testnet_spot_secret_key', ''),
     },
+    'testnet_futures': {
+        'key': clean_env('testnet_futures_api_key', ''),
+        'secret': clean_env('testnet_futures_secret_key', ''),
+    },
     'gemini': clean_env('GEMINI_API_KEY') or clean_env('gemini_api_key') or clean_env('gemini_api') or clean_env('GEMINI_KEY') or clean_env('gemini') or ''
 }
 
@@ -113,6 +117,7 @@ RISK_PROFILES = {
 }
 
 ACTIVE_RISK_PROFILE = 'Moderado'
+PAPER_TRADING_MODE = True # Ativa o uso da Binance Testnet
 PAPER_TRADING = False
 
 RSI_CONFIG = {
