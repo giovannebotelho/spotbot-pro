@@ -513,7 +513,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         risk_amount = total_balance * risk_pct
                         log(f"🏆 \033[1;36mFixed Risk Sizing\033[0m: Risco aceito de \033[1;32m${risk_amount:.2f} USDT\033[0m (2% da banca).")
                         
-                        initial_leverage = 15
+
                     
                         # 2. Definição do TP/SL (Dinâmico Hedge Fund)
                         if '[BAND-SNIPER 15M]' in trigger_reason:
@@ -543,6 +543,15 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                                 tp_price = cur_price - tp_dist
                                 sl_price = cur_price + sl_dist
                     
+                        # Calcula a distância percentual do Stop Loss
+                        sl_pct_dist = abs(cur_price - sl_price) / cur_price
+                        
+                        # Alavancagem Dinâmica: 1 / (Stop Pct * 2.0 buffer) travado em 5x max
+                        raw_leverage = 1.0 / (sl_pct_dist * 2.0) if sl_pct_dist > 0 else 1.0
+                        initial_leverage = max(1, min(5, int(raw_leverage)))
+                        
+                        log(f"⚙️ \033[1;36mDynamic Leverage\033[0m: Stop a {sl_pct_dist*100:.2f}% | Alavancagem: \033[1;33m{initial_leverage}x\033[0m")
+                        
                         # 3. Gerenciamento de Risco (Liquidation Buffer)
                         from core.futures_risk_manager import validate_trade_safety
                         safe_leverage = await validate_trade_safety(symbol, cur_price, sl_price, initial_leverage, direction, log)
