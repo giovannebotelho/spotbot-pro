@@ -10,7 +10,7 @@ TIMEZONE = ZoneInfo('America/Sao_Paulo')
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 def clean_env(key, default=''):
-    val = os.getenv(key)
+    val = os.getenv(key) or os.getenv(key.upper()) or os.getenv(key.lower())
     if not val:
         return default
     return str(val).strip().strip('"').strip("'").strip()

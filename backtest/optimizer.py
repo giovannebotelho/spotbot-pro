@@ -1,81 +1,84 @@
-import asyncio
 import itertools
-import json
-from backtest.runner import run_backtest
-from config.settings import RSI_CONFIG, ATR_CONFIG
+import concurrent.futures
+from backtest.engine import load_data, calculate_indicators, Backtester
+import pandas as pd
 
-async def run_optimization(days=60):
-    print(f"🧪 Iniciando Otimização de Parâmetros ({days} dias)...")
+def evaluate_params(args):
+    df_15m, sl_mult, tp_mult, max_roi, trail_rate = args
+    tester = Backtester(
+        df=df_15m, 
+        initial_balance=100.0, 
+        risk_per_trade=0.02,
+        sl_multiplier=sl_mult,
+        tp_multiplier=tp_mult,
+        max_roi=max_roi,
+        trailing_rate=trail_rate
+    )
+    equity_df, trades = tester.run()
     
-    rsi_variations = [
-        {"name": "Standard RSI", "config": RSI_CONFIG},
-        {
-            "name": "Conservative RSI",
-            "config": {
-                "levels": {0: 15, 1: 20, 2: 25, 3: 30, 4: 35, 5: 40},
-                "high": 65,
-                "dynamic_low": {0: 15, 1: 20, 2: 25, 3: 30, 4: 35, 5: 40},
-                "min": {0: 10, 1: 15, 2: 20, 3: 25, 4: 30, 5: 35}
-            }
-        }
-    ]
+    if not trades:
+        return None
+        
+    final_balance = equity_df['equity'].iloc[-1]
     
-    atr_variations = [
-        {"name": "Standard ATR (2.0/3.0)", "config": {"period": 14, "sl_multiplier": 2.0, "tp_multiplier": 3.0, "use_atr_stop": True}},
-        {"name": "Tight ATR (1.5/2.0)", "config": {"period": 14, "sl_multiplier": 1.5, "tp_multiplier": 2.0, "use_atr_stop": True}},
-        {"name": "Wide ATR (3.0/5.0)", "config": {"period": 14, "sl_multiplier": 3.0, "tp_multiplier": 5.0, "use_atr_stop": True}}
-    ]
+    # Calculate Max Drawdown
+    equity_series = equity_df['equity']
+    peak = equity_series.expanding(min_periods=1).max()
+    drawdown = (equity_series - peak) / peak
+    max_drawdown = drawdown.min()
+    
+    win_trades = [t for t in trades if t['pnl'] > 0]
+    win_rate = len(win_trades) / len(trades)
+    
+    return {
+        'sl_mult': sl_mult,
+        'tp_mult': tp_mult,
+        'max_roi': max_roi,
+        'trail_rate': trail_rate,
+        'final_balance': final_balance,
+        'max_drawdown': max_drawdown * 100,
+        'win_rate': win_rate * 100,
+        'total_trades': len(trades)
+    }
 
-    ema_variations = [True, False]
+def run_optimizer():
+    print("[1] Carregando dados do laboratorio...")
+    df_15m = load_data('BTCUSDT', '15m')
+    df_1h = load_data('BTCUSDT', '1h')
+    df_15m = calculate_indicators(df_15m, df_1h)
+    
+    print("[2] Preparando matriz de otimizacao (Grid Search)...")
+    sl_multipliers = [1.0, 1.5, 2.0, 2.5]
+    tp_multipliers = [1.0, 1.5, 2.0, 3.0]
+    max_rois = [0.05, 0.10, 0.15]
+    trail_rates = [0.01, 0.015, 0.02]
+    
+    combinations = list(itertools.product(sl_multipliers, tp_multipliers, max_rois, trail_rates))
+    args_list = [(df_15m, *combo) for combo in combinations]
+    
+    print(f"[3] Iniciando Forca Bruta para {len(combinations)} combinacoes...")
+    
     results = []
-    combinations = list(itertools.product(rsi_variations, atr_variations, ema_variations))
-    total_combinations = len(combinations)
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        for res in executor.map(evaluate_params, args_list):
+            if res:
+                results.append(res)
+                
+    results_df = pd.DataFrame(results)
     
-    print(f"🔍 Testando {total_combinations} combinações...")
+    profitable = results_df[results_df['final_balance'] > 100]
     
-    for i, (rsi_var, atr_var, use_ema) in enumerate(combinations):
-        ema_name = "EMA On" if use_ema else "EMA Off"
-        print(f"\n[{i+1}/{total_combinations}] Testando: {rsi_var['name']} + {atr_var['name']} + {ema_name}")
+    if profitable.empty:
+        print("Nenhuma configuracao deu lucro.")
+        return
         
-        config_override = {
-            "RSI_CONFIG": rsi_var['config'],
-            "ATR_CONFIG": atr_var['config'],
-            "TRADING_CONFIG": {"use_ema_filter": use_ema}
-        }
-        
-        try:
-            result = await run_backtest(days=days, initial_capital=100.0, config_override=config_override)
-            results.append({
-                "rsi_name": rsi_var['name'],
-                "atr_name": atr_var['name'],
-                "ema_status": ema_name,
-                "profit": result['profit'],
-                "profit_percent": result['profit_percent'],
-                "trades": result['trades'],
-                "final_balance": result['final_balance']
-            })
-        except Exception as e:
-            print(f"❌ Erro na combinação {i+1}: {e}")
-            
-    results.sort(key=lambda x: x['profit'], reverse=True)
+    print("\n[TOP 5 LUCRO]")
+    top_profit = profitable.sort_values(by='final_balance', ascending=False).head(5)
+    print(top_profit.to_string(index=False))
     
-    print("\n" + "="*60)
-    print("🏆 RESULTADOS DA OTIMIZAÇÃO")
-    print("="*60)
-    
-    for res in results:
-        color = "\033[1;32m" if res['profit'] > 0 else "\033[1;31m"
-        print(f"{res['rsi_name']:<20} | {res['atr_name']:<20} | {res['ema_status']:<8} | {color}{res['profit_percent']:6.2f}%\033[0m | {res['trades']:<6}")
+    print("\n[TOP 5 MENOR RISCO (DRAWDOWN)]")
+    top_safe = profitable.sort_values(by='max_drawdown', ascending=False).head(5)
+    print(top_safe.to_string(index=False))
 
-    best = results[0]
-    print(f"\n✅ Melhor Configuração: {best['rsi_name']} + {best['atr_name']} + {best['ema_status']} (Lucro: {best['profit_percent']:.2f}%)")
-    
-    with open("optimization_results.json", "w") as f:
-        json.dump(results, f, indent=4)
-        
-    print("💾 Resultados salvos em optimization_results.json")
-
-if __name__ == "__main__":
-    days_input = input("Quantos dias de histórico você quer testar? (Padrão: 60): ").strip()
-    days = int(days_input) if days_input and days_input.isdigit() else 60
-    asyncio.run(run_optimization(days=days))
+if __name__ == '__main__':
+    run_optimizer()
