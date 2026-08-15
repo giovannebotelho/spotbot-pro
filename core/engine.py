@@ -153,10 +153,15 @@ async def get_account_balances():
             _balance_client = await BinanceAsyncClient.create(api_key, api_secret, testnet=testnet_flag)
             await sync_binance_time(_balance_client, log=lambda m: None)
 
-        bnb_balance = await _balance_client.get_asset_balance(asset='BNB')
-        bnb_balance_free = float(bnb_balance['free'])
-        bnb_price_usdt = await get_bnb_price(_balance_client)
-        bnb_balance_usdt = bnb_balance_free * bnb_price_usdt
+        if PAPER_TRADING_MODE:
+            bnb_balance_free = 0.0
+            bnb_price_usdt = 0.0
+            bnb_balance_usdt = 0.0
+        else:
+            bnb_balance = await _balance_client.get_asset_balance(asset='BNB')
+            bnb_balance_free = float(bnb_balance['free'])
+            bnb_price_usdt = await get_bnb_price(_balance_client)
+            bnb_balance_usdt = bnb_balance_free * bnb_price_usdt
         usdt_balance = await get_usdt_balance(_balance_client)
 
         _cached_balances = {
@@ -209,6 +214,8 @@ async def panic_sell_position(symbol, client_instance=None):
 
         # 2. Obtem quantidade livre e vende a mercado
         asset_name = symbol.replace("USDT", "")
+        if PAPER_TRADING_MODE:
+            return 100.0, ""
         bal = await cli.get_asset_balance(asset=asset_name)
         free_qty = float(bal['free']) if bal else 0.0
 
@@ -354,9 +361,13 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
                 c = await BinanceAsyncClient.create(api_key, api_secret, testnet=testnet_flag)
                 await sync_binance_time(c, log=lambda m: None)
                 usdt = await get_usdt_balance(c)
-                bnb = await c.get_asset_balance(asset='BNB')
-                bnb_free = float(bnb['free'])
-                bnb_price = await get_bnb_price(c)
+                if PAPER_TRADING_MODE:
+                    bnb_free = 0.0
+                    bnb_price = 0.0
+                else:
+                    bnb = await c.get_asset_balance(asset='BNB')
+                    bnb_free = float(bnb['free'])
+                    bnb_price = await get_bnb_price(c)
                 
                 db_stats = db.get_stats()
                 acc_pnl = db_stats['total_net_profit']
@@ -431,7 +442,10 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
             try:
                 c = await BinanceAsyncClient.create(api_key, api_secret, testnet=testnet_flag)
                 await sync_binance_time(c, log=lambda m: None)
-                open_orders = await c.get_open_orders()
+                if PAPER_TRADING_MODE:
+                    open_orders = []
+                else:
+                    open_orders = await c.get_open_orders()
                 
                 if not open_orders:
                     return "ℹ️ <b>Nenhuma ordem OCO ou posição em aberto no momento.</b>\nO SpotBot Pro está varrendo o mercado em busca de novas oportunidades!"
@@ -519,8 +533,10 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
         elif cmd == '/panic_sell_all':
             if active_positions:
                 count = len(active_positions)
-                for sym in list(active_positions.keys()):
-                    asyncio.create_task(panic_sell_position(sym))
+                # Atualiza posições ativas
+                if not PAPER_TRADING_MODE:
+                    for sym in list(active_positions.keys()):
+                        asyncio.create_task(panic_sell_position(sym))
                 return f"🔥 <b>PANIC SELL DISPARADO!</b>\nEncerrando {count} posição(ões) ativa(s) a mercado imediatamente..."
             return "ℹ️ Nenhuma posição ativa no momento para encerrar."
 
@@ -966,8 +982,11 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
                         # Fix Binance Fee: pega a quantidade real líquida recebida para evitar "Insufficient Balance"
                         base_asset = active_target_symbol.replace('USDT', '')
                         try:
-                            asset_balance = await client.get_asset_balance(asset=base_asset)
-                            available_qty = float(asset_balance['free'])
+                            if PAPER_TRADING_MODE:
+                                available_qty = 100.0
+                            else:
+                                asset_balance = await client.get_asset_balance(asset=base_asset)
+                                available_qty = float(asset_balance['free'])
                         except Exception:
                             available_qty = float('inf')
                             

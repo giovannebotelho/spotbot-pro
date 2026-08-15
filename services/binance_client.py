@@ -1,9 +1,11 @@
 import asyncio
 import aiohttp
-from config.settings import TRADING_CONFIG
+from config.settings import TRADING_CONFIG, PAPER_TRADING_MODE
 
 async def get_usdt_balance(client):
     """Obtém o saldo disponível de USDT na conta do cliente."""
+    if PAPER_TRADING_MODE:
+        return await get_futures_usdt_balance(client)
     balance = await client.get_asset_balance(asset='USDT')
     return float(balance['free'])
 
@@ -46,9 +48,14 @@ async def get_multi_klines(client, symbols, interval, limit):
     return dict(results)
 
 async def get_bnb_price(client):
-    """Obtém o preço atual do BNB em USDT."""
-    ticker = await client.get_symbol_ticker(symbol="BNBUSDT")
-    return float(ticker['price'])
+    """Obtém o preço atual do BNB para cálculo de taxas."""
+    if PAPER_TRADING_MODE:
+        return 500.0
+    try:
+        ticker = await client.get_symbol_ticker(symbol='BNBUSDT')
+        return float(ticker['price'])
+    except Exception:
+        return 300.0
 
 async def get_futures_analytics(symbol):
     """
