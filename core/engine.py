@@ -674,9 +674,14 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
         
         from core.recovery import recover_state
         await recover_state(client, bsm, db, log, status, saldo_inicial_usdt, active_positions, bot_status_data, shared_market_data, active_monitoring_tasks, globals())
-        symbol_info = await client.get_symbol_info(symbol)
-        tick_size = float(next(filter for filter in symbol_info['filters'] if filter['filterType'] == 'PRICE_FILTER')['tickSize'])
-        quote_precision = int(symbol_info['quoteAssetPrecision'])
+        
+        if PAPER_TRADING_MODE:
+            tick_size = 0.01
+            quote_precision = 2
+        else:
+            symbol_info = await client.get_symbol_info(symbol)
+            tick_size = float(next(filter for filter in symbol_info['filters'] if filter['filterType'] == 'PRICE_FILTER')['tickSize'])
+            quote_precision = int(symbol_info['quoteAssetPrecision'])
 
         # FASE 4 (HedgeFund Edition): Iniciando Motor Paralelo de Futuros
         log("🔄 Sincronizando e Inicializando a Célula de Mercado Futuros...")

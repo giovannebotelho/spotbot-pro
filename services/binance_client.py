@@ -13,11 +13,16 @@ async def get_order_book(client, symbol, depth=None):
     """Recupera o livro de ofertas (order book) para um símbolo com a profundidade solicitada."""
     if depth is None:
         depth = TRADING_CONFIG['depth']
-    order_book = await client.get_order_book(symbol=symbol, limit=depth)
+    if PAPER_TRADING_MODE:
+        order_book = await client.futures_order_book(symbol=symbol, limit=depth)
+    else:
+        order_book = await client.get_order_book(symbol=symbol, limit=depth)
     return order_book
 
 async def get_order_details(client, symbol, order_id):
     """Obtém detalhes de uma ordem específica pelo ID."""
+    if PAPER_TRADING_MODE:
+        return {'status': 'FILLED', 'executedQty': '1.0', 'cummulativeQuoteQty': '10.0', 'price': '10.0'}
     order_details = await client.get_order(symbol=symbol, orderId=order_id)
     return order_details
 
@@ -31,14 +36,20 @@ def extract_volumes(klines):
 
 async def get_klines(client, symbol, interval, limit):
     """Obtém as velas (klines) para um símbolo específico."""
-    klines = await client.get_klines(symbol=symbol, interval=interval, limit=limit)
+    if PAPER_TRADING_MODE:
+        klines = await client.futures_klines(symbol=symbol, interval=interval, limit=limit)
+    else:
+        klines = await client.get_klines(symbol=symbol, interval=interval, limit=limit)
     return klines
 
 async def get_multi_klines(client, symbols, interval, limit):
     """Obtém klines em lote de forma assíncrona para múltiplos símbolos."""
     async def fetch(sym):
         try:
-            res = await client.get_klines(symbol=sym, interval=interval, limit=limit)
+            if PAPER_TRADING_MODE:
+                res = await client.futures_klines(symbol=sym, interval=interval, limit=limit)
+            else:
+                res = await client.get_klines(symbol=sym, interval=interval, limit=limit)
             return sym, res
         except Exception:
             return sym, []
@@ -97,6 +108,8 @@ async def get_multi_timeframe_klines(client, symbol):
     """
     async def fetch(tf, limit):
         try:
+            if PAPER_TRADING_MODE:
+                return await client.futures_klines(symbol=symbol, interval=tf, limit=limit)
             return await client.get_klines(symbol=symbol, interval=tf, limit=limit)
         except Exception:
             return []

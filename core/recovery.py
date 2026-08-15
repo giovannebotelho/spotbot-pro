@@ -2,14 +2,18 @@ import asyncio
 import pandas as pd
 import datetime as dt_module
 from zoneinfo import ZoneInfo
-from config.settings import TELEGRAM_CONFIG, TRADING_CONFIG, MAX_CONCURRENT_POSITIONS, TIMEZONE
+from config.settings import TELEGRAM_CONFIG, TRADING_CONFIG, MAX_CONCURRENT_POSITIONS, TIMEZONE, PAPER_TRADING_MODE
 from services.binance_client import get_order_details
 from core.order_manager import monitor_oco_lifecycle
 from services.telegram_notifier import send_telegram_message
 
 async def recover_state(client, bsm, db, log, status, saldo_inicial_usdt, active_positions, bot_status_data, shared_market_data, active_monitoring_tasks, globals_dict):
+    if PAPER_TRADING_MODE:
+        return
+        
     # Verificação e Adotação Multi-Posição de Ordens OCO Ativas (State Recovery Engine v4.0)
     open_ocos = await client.get_open_oco_orders()
+        
     if open_ocos:
         log(f"🔄 \033[1;36mState Recovery Engine\033[0m: {len(open_ocos)} ordem(ns) OCO ativa(s) encontrada(s) na Binance!")
         for oco_order in open_ocos[:MAX_CONCURRENT_POSITIONS]:
