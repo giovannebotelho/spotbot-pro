@@ -21,6 +21,15 @@ shared_futures_market_data = {
     'dates': [], 'klines': [], 'bb_upper': [], 'bb_lower': [], 'ema200': [], 'volumes': []
 }
 
+import time
+_log_throttle = {}
+
+def log_throttled(msg, key, log_fn, cooldown=300):
+    now = time.time()
+    if now - _log_throttle.get(key, 0) > cooldown:
+        log_fn(msg)
+        _log_throttle[key] = now
+
 async def run_futures_bot(client, bsm, db, log=print, status=print):
     global bot_futures_running, bot_futures_status_data
     bot_futures_running = True
@@ -265,10 +274,13 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         
                             if dist_lower_bb < -1.5 and has_volume_spike and rsi < 25:
                                 direction = 'LONG'
-                                trigger_reason = f"🩸 [LIQUIDATION HUNTER] Liquidação em massa detectada! Dist BB: {dist_lower_bb:.2f}% | RSI: {rsi:.1f}"
+                                trigger_reason = f"📉 [BAND-SNIPER 15M] Perfuração violenta da Banda Inferior ({dist_lower_bb:.2f}%) com RSI extremo ({rsi:.1f})"
                             elif dist_upper_bb > 1.5 and has_volume_spike and rsi > 75:
                                 direction = 'SHORT'
-                                trigger_reason = f"🩸 [LIQUIDATION HUNTER] FOMO em massa detectado! Dist BB: +{dist_upper_bb:.2f}% | RSI: {rsi:.1f}"
+                                trigger_reason = f"📈 [BAND-SNIPER 15M] Fura-Teto violento da Banda Superior ({dist_upper_bb:.2f}%) com RSI extremo ({rsi:.1f})"
+                            else:
+                                if not has_volume_spike:
+                                    log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.", f"smart_relax_{symbol}", log, 900)
                     
                     # 2. 15m Bollinger Band Sniper (Reversão à Média Extrema)
                     if not direction:
@@ -360,46 +372,46 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         # Filtro Anti-Foguete / Anti-Faca Caindo (Impede entrar contra uma barra de força absoluta)
                         is_green_candle = cur_price > cur_open
                         is_red_candle = cur_price < cur_open
-                        candle_body_pct = (abs(cur_price - cur_open) / cur_open) * 100
+                        candle_variation = (abs(cur_price - cur_open) / cur_open) * 100
                     
-                        if direction == 'SHORT' and is_green_candle and candle_body_pct > 0.35:
+                        if direction == 'SHORT' and is_green_candle and candle_variation > 0.35:
                             if '[PRICE ACTION]' not in trigger_reason:
-                                log(f"🛡️ [ANTI-FOGUETE] Bloqueando SHORT em {symbol} pois a vela de alta é muito forte ({candle_body_pct:.2f}%). Aguardando exaustão!")
+                                log_throttled(f"🛡️ [ANTI-FOGUETE] Bloqueando SHORT em {symbol} pois a vela de alta é muito forte ({candle_variation:.2f}%). Aguardando exaustão!", f"foguete_{symbol}", log, 600)
                                 direction = None
                             
-                        elif direction == 'LONG' and is_red_candle and candle_body_pct > 0.35:
+                        elif direction == 'LONG' and is_red_candle and candle_variation > 0.35:
                             if '[PRICE ACTION]' not in trigger_reason:
-                                log(f"🛡️ [ANTI-FACA] Bloqueando LONG em {symbol} pois a vela de baixa é muito forte ({candle_body_pct:.2f}%). Aguardando exaustão!")
+                                log_throttled(f"🛡️ [ANTI-FACA] Bloqueando LONG em {symbol} pois a vela de baixa é muito forte ({candle_variation:.2f}%). Aguardando exaustão!", f"faca_{symbol}", log, 600)
                                 direction = None
                         
                         elif direction == 'LONG' and macd_hist_curr > 0 and macd_hist_curr < macd_hist_prev:
                             if '[PRICE ACTION]' not in trigger_reason and '[BAND-SNIPER' not in trigger_reason:
-                                log(f"🛡️ [MACD EXAUSTÃO] Bloqueando LONG em {symbol} pois a força compradora no MACD já está caindo (Histograma encolhendo).")
+                                log_throttled(f"🛡️ [MACD EXAUSTÃO] Bloqueando LONG em {symbol} pois a força compradora no MACD já está caindo.", f"macd_long_{symbol}", log, 600)
                                 direction = None
                             
                         elif direction == 'SHORT' and macd_hist_curr < 0 and macd_hist_curr > macd_hist_prev:
                             if '[PRICE ACTION]' not in trigger_reason and '[BAND-SNIPER' not in trigger_reason:
-                                log(f"🛡️ [MACD EXAUSTÃO] Bloqueando SHORT em {symbol} pois a força vendedora no MACD já está caindo (Histograma encolhendo).")
+                                log_throttled(f"🛡️ [MACD EXAUSTÃO] Bloqueando SHORT em {symbol} pois a força vendedora no MACD já está caindo.", f"macd_ex_{symbol}", log, 600)
                                 direction = None
                             
                         elif direction == 'SHORT' and rsi > 78:
-                            log(f"🛡️ [MOMENTUM EXTREMO] Bloqueando SHORT em {symbol} pois o RSI está parabólico (RSI: {rsi:.1f}).")
+                            log_throttled(f"🛡️ [MOMENTUM EXTREMO] Bloqueando SHORT em {symbol} pois o RSI está parabólico (RSI: {rsi:.1f}).", f"mom_short_{symbol}", log, 600)
                             direction = None
                         
                         elif direction == 'LONG' and rsi < 22:
-                            log(f"🛡️ [MOMENTUM EXTREMO] Bloqueando LONG em {symbol} pois o ativo está em queda livre (RSI: {rsi:.1f}).")
+                            log_throttled(f"🛡️ [MOMENTUM EXTREMO] Bloqueando LONG em {symbol} pois o ativo está em queda livre (RSI: {rsi:.1f}).", f"mom_long_{symbol}", log, 600)
                             direction = None
                         
                         elif not has_volume_spike and '[GEMINI-AI]' not in trigger_reason:
-                            log(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.")
+                            log_throttled(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.", f"vol_{symbol}", log, 1200)
                             direction = None
                         
                         elif direction == 'LONG' and ema_dist_pct < 1.0 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
-                            log(f"🛡️ [EMA DIST] Bloqueando LONG em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido > 1.0%")
+                            log_throttled(f"🛡️ [EMA DIST] Bloqueando LONG em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido > 1.0%", f"ema_{symbol}", log, 600)
                             direction = None
                         
                         elif direction == 'SHORT' and ema_dist_pct > -1.0 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
-                            log(f"🛡️ [EMA DIST] Bloqueando SHORT em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido < -1.0%")
+                            log_throttled(f"🛡️ [EMA DIST] Bloqueando SHORT em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido < -1.0%", f"ema_{symbol}", log, 600)
                             direction = None
                         
                         elif direction == 'LONG' and btc_trend == 'BEAR' and symbol != 'BTCUSDT':
@@ -546,9 +558,9 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         # Calcula a distância percentual do Stop Loss
                         sl_pct_dist = abs(cur_price - sl_price) / cur_price
                         
-                        # Alavancagem Dinâmica: 1 / (Stop Pct * 2.0 buffer) travado em 5x max
+                        # Alavancagem Dinâmica: 1 / (Stop Pct * 2.0 buffer) travado em 50x max (Para cobrir exigência de margem em stops curtos)
                         raw_leverage = 1.0 / (sl_pct_dist * 2.0) if sl_pct_dist > 0 else 1.0
-                        initial_leverage = max(1, min(5, int(raw_leverage)))
+                        initial_leverage = max(1, min(50, int(raw_leverage)))
                         
                         log(f"⚙️ \033[1;36mDynamic Leverage\033[0m: Stop a {sl_pct_dist*100:.2f}% | Alavancagem: \033[1;33m{initial_leverage}x\033[0m")
                         
