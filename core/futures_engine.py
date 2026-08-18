@@ -88,7 +88,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 
                     if tp_order and sl_order:
                         await futures_state.add(rec_symbol, {
-                            'entry': entry_price, 'tp': tp_price, 'sl': sl_price, 'direction': direction
+                            'entry': entry_price, 'tp': tp_price, 'sl': sl_price, 'direction': direction, 'qty': qty
                         })
                         bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
                         bot_futures_status_data['target_asset'] = rec_symbol
