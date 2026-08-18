@@ -280,7 +280,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                                 trigger_reason = f"📈 [BAND-SNIPER 15M] Fura-Teto violento da Banda Superior ({dist_upper_bb:.2f}%) com RSI extremo ({rsi:.1f})"
                             else:
                                 if not has_volume_spike:
-                                    log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.", f"smart_relax_{symbol}", log, 900)
+                                    log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.", f"smart_relax_{symbol}", log, 7200)
+                                    pass
                     
                     # 2. 15m Bollinger Band Sniper (Reversão à Média Extrema)
                     if not direction:
@@ -403,7 +404,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             direction = None
                         
                         elif not has_volume_spike and '[GEMINI-AI]' not in trigger_reason:
-                            log_throttled(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.", f"vol_{symbol}", log, 1200)
+                            log_throttled(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.", f"vol_{symbol}", log, 7200)
                             direction = None
                         
                         elif direction == 'LONG' and ema_dist_pct < 1.0 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
