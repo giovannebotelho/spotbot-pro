@@ -68,7 +68,6 @@ async def run_trailing_lock_monitor(client, log=print):
                 if cur_roi >= 5.5:
                     log(f"🎯 [TAKE-PROFIT MAX] {symbol} atingiu o alvo de 5.5% de ROI! Fechando a mercado.")
                     await execute_trailing_close(client, symbol, direction, qty, log)
-                    await futures_state.remove(symbol)
                     continue
                     
                 # Regra 2: Trailing Lock Dinâmico Flexível
@@ -78,7 +77,6 @@ async def run_trailing_lock_monitor(client, log=print):
                         if (peak_roi - cur_roi) >= 3.0:
                             log(f"⚡ [TRAILING-LOCK] Recuo detectado no lucro (Pico: {peak_roi:.2f}%, Atual: {cur_roi:.2f}%). Garantindo a operação!")
                             await execute_trailing_close(client, symbol, direction, qty, log)
-                            await futures_state.remove(symbol)
                             continue
                             
                 # Regra 3: Tolerância Máxima Negativa
@@ -86,7 +84,6 @@ async def run_trailing_lock_monitor(client, log=print):
                 if cur_roi <= -9.0:
                     log(f"⚡ [STOP PREVENTIVO] Trade atingiu tolerância máxima negativa (Atual: {cur_roi:.2f}%). Fechando antes do SL rígido!")
                     await execute_trailing_close(client, symbol, direction, qty, log)
-                    await futures_state.remove(symbol)
                     continue
                             
         except Exception as e:
