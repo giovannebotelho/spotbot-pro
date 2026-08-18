@@ -520,10 +520,19 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         available_balance = await get_futures_usdt_balance(client)
                         total_balance = await get_futures_usdt_total_balance(client)
                     
-                        # 1. Dimensionamento Fixo por Risco (Fase 2)
-                        risk_pct = 0.02 # 2% da banca em risco por trade
+                        # 1. Dimensionamento Dinâmico por Risco Escalonado (Fase 2)
+                        # Adapta o risco de acordo com o tamanho da banca (Bancas menores precisam de % maior para atingir o mínimo nocional)
+                        if total_balance <= 200:
+                            risk_pct = 0.08  # 8% para bancas muito pequenas
+                        elif total_balance <= 1000:
+                            risk_pct = 0.05  # 5% para bancas pequenas
+                        elif total_balance <= 3000:
+                            risk_pct = 0.03  # 3% para bancas médias
+                        else:
+                            risk_pct = 0.02  # 2% Institucional para bancas grandes (> $3000)
+                            
                         risk_amount = total_balance * risk_pct
-                        log(f"🏆 \033[1;36mFixed Risk Sizing\033[0m: Risco aceito de \033[1;32m${risk_amount:.2f} USDT\033[0m (2% da banca).")
+                        log(f"🏆 \033[1;36mDynamic Risk Sizing\033[0m: Risco aceito de \033[1;32m${risk_amount:.2f} USDT\033[0m ({risk_pct*100:.1f}% da banca de ${total_balance:.2f}).")
                         
 
                     
