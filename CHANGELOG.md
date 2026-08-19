@@ -1,6 +1,15 @@
 # Changelog
 Todos os registros de evolução da arquitetura do **SpotBot Pro** estão listados aqui.
 
+## [v7.0.1] - Dynamic Risk & Elite Asset Selection
+### Added
+- **Dynamic Risk Sizing Escalonado (`futures_engine.py`):** Sistema adaptativo de risco por trade com base no saldo total (8% para bancas $\le \$200$, 5% até $\$1.000$, 3% até $\$3.000$ e 2% institucional acima de $\$3.000$), garantindo a ultrapassagem de valores nocionais mínimos da Binance.
+- **Dynamic Leverage Engine (até 50x):** Cálculo automático de alavancagem $\frac{1}{\text{Stop Loss \%} \times 2.0}$ para acomodar ordens de scalping com stops curtos em 15m.
+- **Stop Preventivo Antecipado (-9.0% ROI):** Fechamento a mercado automático ao atingir -9% de ROI para estancar perdas antes do Stop Loss rígido.
+- **Take-Profit Máximo (+5.5% ROI):** Fechamento dinâmico instantâneo na máxima lucratividade de scalping.
+- **Cesta Top 6 Elite:** Refinamento dos pares operados no Futuros e Scanner (`BTC`, `ETH`, `SOL`, `BNB`, `XRP`, `LINK`), eliminando pares com ruído técnico excessivo.
+- **Fix de UDS / Telegram Trade Closure:** Preservação de estado na memória no Trailing Lock para captura e cálculo de PnL em tempo real via WebSocket de ordens executadas.
+
 ## [v7.0] - HedgeFund & Futures Market Edition
 ### Added
 - **Mercado de Futuros Integrado (20x Isolated Leverage):** Motor de trading paralelo (`core/futures_engine.py`) operando simultaneamente com o Mercado Spot.

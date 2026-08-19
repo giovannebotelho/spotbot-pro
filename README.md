@@ -6,7 +6,7 @@
 [![Google Gemini](https://img.shields.io/badge/Google-Gemini%202.5--Flash-4285F4.svg)](https://aistudio.google.com/)
 [![Architecture](https://img.shields.io/badge/Architecture-HedgeFund%20Quant%20v7.0-purple.svg)](https://github.com/giovannebotelho/spotbot-pro-hedgefund)
 
-**SpotBot Pro v7.0** é um algoritmo de negociação quantitativa de nível institucional projetado com os pilares da microestrutura de mercado das grandes mesas de Wall Street (**Order Flow CVD Tape Reading, 15m Bollinger Band Sniper, 20x Isolated Futures Leverage, Cointegration Pair Trading, Correlation Lead-Lag Alpha, Smart Recovery DCA em Suportes de Fibonacci e Kelly Criterion Position Sizing**), integrado à **Inteligência Artificial Generativa do Google Gemini (SDK `google-genai`)** e com **suporte completo para o Mercado de Futuros (Binance USDS-M Futures)**.
+**SpotBot Pro v7.0** é um algoritmo de negociação quantitativa de nível institucional projetado com os pilares da microestrutura de mercado das grandes mesas de Wall Street (**Order Flow CVD Tape Reading, 15m Bollinger Band Sniper, Alavancagem Dinâmica até 50x Isolada, Cointegration Pair Trading, Correlation Lead-Lag Alpha, Smart Recovery DCA em Suportes de Fibonacci, Dynamic Risk Sizing Escalonado e Stop Preventivo Antecipado**), integrado à **Inteligência Artificial Generativa do Google Gemini (SDK `google-genai`)** e com **suporte completo para o Mercado de Futuros (Binance USDS-M Futures)**.
 
 ---
 
@@ -15,12 +15,12 @@
 ```mermaid
 graph TD
     subgraph Quant_Engine_v7 ["🚀 SpotBot Pro v7.0 Architecture (Spot + Futures)"]
-        F5["📰 FASE 5 (v4.0): AI Panic News Scanner<br/>CryptoPanic + IA Gemini 2.5 Flash (Score 0-100)"] --> F1
-        F1["🧪 FASE 1 (v5.0): Smart Recovery DCA & Flash Dump Protection<br/>Recompra em Suporte Fibonacci 61.8% e Override de PnL"] --> F2
-        F2["⚡ FASE 2 (v5.0): Correlation Lead-Lag Alpha Engine<br/>Antecipação de impulso do BTC 1m em Altcoins (1.5x)"] --> F3
-        F3["📊 FASE 3 (v5.0): Order Flow CVD Tape Reading<br/>Análise de agressão a mercado em 500 trades (Buys >= 60%)"] --> F4
-        F4["🎯 FASE 4 (v7.0): 15m Bollinger Band Sniper & Futures Engine<br/>Operações alavancadas 20x Isoladas + Reversão à Média Extrema"] --> KC
-        KC["🏆 FASE 5 (v5.0): Kelly Criterion Position Sizing<br/>Dimensionamento ótimo (Half-Kelly) via estatísticas do SQLite/Postgres"] --> OCO["🎯 Ordens OCO (Spot) e Posições Alavancadas (Futuros)"]
+        F5["📰 FASE 5: AI Panic News Scanner<br/>CryptoPanic + IA Gemini 2.5 Flash"] --> F1
+        F1["🧪 FASE 1: Smart Recovery DCA & Flash Dump Protection<br/>Recompra em Fibonacci 61.8% e Override de PnL"] --> F2
+        F2["⚡ FASE 2: Correlation Lead-Lag Alpha Engine<br/>Antecipação de impulso do BTC 1m em Altcoins Elite"] --> F3
+        F3["📊 FASE 3: Order Flow CVD Tape Reading<br/>Análise de agressão a mercado em 500 trades"] --> F4
+        F4["🎯 FASE 4: 15m Bollinger Band Sniper & Futures Engine<br/>Operações alavancadas dinâmicas até 50x + Trailing Lock"] --> KC
+        KC["🏆 FASE 5: Dynamic Risk Sizing & Stop Preventivo<br/>Escalonamento de risco por saldo + Saída antecipada a -9% ROI"] --> OCO["🎯 Ordens OCO (Spot) e Posições Alavancadas (Futuros)"]
     end
 ```
 
@@ -40,20 +40,17 @@ graph TD
 - **Leitura de Agressão**: Analisa as últimas 500 negociações executadas a mercado (*Market Orders*) na Binance Spot.
 - **Confirmador de Volume**: Dispara compras quando a agressão compradora atinge $\ge 60\%$ e **dobra o lote (2.0x)** se o delta acumulado ultrapassar **+$50.000 USDT**.
 
-### 4. ⚖️ Cointegration Pair Trading & Statistical Arbitrage
-- **Reversão à Média**: Monitora o Z-Score da razão de preço entre o ativo atual e o Bitcoin (`Price_Alt / Price_BTC`).
-- **Desvio Estatístico**: Abre compras por arbitragem estatística quando o ativo estiver a $Z \le -2.0\sigma$ de desvio-padrão abaixo da média histórica.
+### 4. ⚙️ Alavancagem Dinâmica & Dynamic Risk Sizing
+- **Dimensionamento Escalonado por Banca**: Adapta o risco por trade automaticamente conforme o saldo total (8% para bancas $\le \$200$, 5% até $\$1.000$, 3% até $\$3.000$ e 2% institucional acima de $\$3.000$).
+- **Alavancagem Sob Medida**: Calcula a alavancagem exata $\text{Alavancagem} = \frac{1}{\text{Stop Loss \%} \times 2.0}$ (travada entre 1x e 50x) para cobrir a margem necessária com risco controlado.
 
-### 5. 🏆 Kelly Criterion & Monte Carlo Position Sizing
-- **Dimensionamento Matemático**: Substitui valores estáticos de ordem pela Fórmula do **Critério de Kelly** ($f^* = \frac{p \cdot b - q}{b}$), onde $p$ é a taxa de vitória real calculada a partir das operações salvas no banco SQLite.
-- **Half-Kelly Safety**: Aplica 50% de $f^*$ para manter a banca totalmente imune ao risco de ruína.
+### 5. 🛡️ Trailing Lock Dinâmico & Stop Preventivo
+- **Take-Profit Máximo (+5.5% ROI)**: Fecha a mercado imediatamente ao bater a meta de lucro rápido.
+- **Trailing de Retração**: Ao atingir pico de $+3.0\%$ de ROI, garante o lucro protegendo recuos de $3\%$.
+- **Stop Preventivo (-9.0% ROI)**: Encerra posições negativas a mercado antes que alcancem o Stop Loss rígido, reduzindo perdas pela metade.
 
-### 6. 🔒 Trailing Profit Lock (Market Sell Direto)
-- **Trava de Segurança (v6.0)**: Diferente do trailing clássico, a v6.0 aguarda o preço atingir 75% do alvo de Take Profit (TP Conservador 2~3%).
-- **Liquidação a Mercado (v6.0)**: Ao atingir a trava e apresentar uma queda de 0.2% a partir do pico, o bot cancela a OCO e manda uma Market Sell para assegurar os lucros imediatos.
-
-### 7. ⏱️ Sincronização Absoluta de Fuso Horário (BRT)
-- **Horário de Brasília (v6.0)**: Todo o ciclo de operação, logs, inserções de banco de dados e relatórios (Diários e Telemetria em PDF) utilizam estritamente o fuso `America/Sao_Paulo`, prevenindo distorções de *roll-over* diário causadas pelo relógio UTC dos servidores na nuvem.
+### 6. 🪙 Cesta de Ativos Top 6 Elite
+- **Seleção Focada**: Opera exclusivamente nos pares de maior consistência técnica e liquidez institucional: `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `BNBUSDT`, `XRPUSDT` e `LINKUSDT`.
 
 ---
 

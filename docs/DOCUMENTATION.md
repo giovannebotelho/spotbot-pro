@@ -1,21 +1,24 @@
 # 📖 DOCUMENTAÇÃO TÉCNICA DE ARQUITETURA E ENGENHARIA DE SOFTWARE
-## SPOTBOT PRO v7.0.0-HEDGE_FUND — SISTEMA INSTITUCIONAL DE TRADING ALGORÍTMICO QUANTITATIVO E INTELIGÊNCIA ARTIFICIAL
+## SPOTBOT PRO v7.0.1-HEDGE_FUND — SISTEMA INSTITUCIONAL DE TRADING ALGORÍTMICO QUANTITATIVO E INTELIGÊNCIA ARTIFICIAL
 
 ---
 
 ### 📋 SUMÁRIO EXECUTIVO
 - **Nome do Sistema**: SpotBot Pro (HedgeFund & Futures Quantitative Engine)
-- **Versão de Software**: `v7.0.0-HEDGE_FUND`
+- **Versão de Software**: `v7.0.1-HEDGE_FUND`
 - **Classificação de Confiabilidade**: *Critical Fault-Tolerant System (Medical-Grade Standard ISO/IEC 25010)*
 - **Arquitetura**: Multi-threaded Async I/O (Python `asyncio`), Event-Driven WebSockets & Neural AI Synthesis
 - **Exchange Suportada**: Binance Spot & Binance Futures (API REST v3/v1 & WebSocket User/Market Streams)
+- **Cesta de Ativos Operados (Top 6 Elite)**: `['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'LINKUSDT']`
 - **Modelos Quantitativos Integrados**:
   - 15m Bollinger Band Sniper Engine (Mean Reversion em 15m)
-  - 20x Isolated Futures Engine & Liquidation Risk-Buffer Guard
-  - Kelly Criterion & Monte Carlo Position Sizing ($f^*$)
-  - Cointegration Pair Trading & Statistical Arbitrage ($Z\text{-Score} \le -2.0\sigma$)
+  - Dynamic Leverage Engine (Alavancagem Dinâmica Isolada até 50x)
+  - Dynamic Risk Sizing Escalonado (8%, 5%, 3%, 2% conforme saldo da banca)
+  - Trailing Lock Dinâmico & Stop Preventivo Antecipado (-9.0% ROI)
+  - Take-Profit Máximo Automático (+5.5% ROI)
+  - Futures Liquidation Buffer Guard (`futures_risk_manager.py`)
   - Order Flow Cumulative Volume Delta (CVD Tape Reading em 500 Trades)
-  - Correlation Lead-Lag Alpha Engine (BTC 1m Momentum Lead 0.3%)
+  - Correlation Lead-Lag Alpha Engine (BTC 1m Momentum Lead)
   - Smart Recovery DCA em Suportes de Fibonacci (61.8% e 78.6%)
   - AI Sentiment & Market Panic Scanner (CryptoPanic + Gemini 2.5 Flash)
   - Multi-Timeframe Confluence Matrix (4H + 1H + 15M $\ge 70\%$)
@@ -24,9 +27,9 @@
 
 ---
 
-# CAPÍTULO 1: FILOSOFIA QUANTITATIVA E CASCATA DE VALIDAÇÃO v7.0
+# CAPÍTULO 1: FILOSOFIA QUANTITATIVA E CASCATA DE VALIDAÇÃO
 
-O **SpotBot Pro v7.0** opera sob o conceito de **Filtros Quantitativos Hierárquicos v7.0** (Cascata de Validação em 9 Camadas em Tempo Real em Spot e Futuros):
+O **SpotBot Pro v7.0.1** opera sob o conceito de **Filtros Quantitativos Hierárquicos** (Cascata de Validação em Tempo Real em Spot e Futuros):
 
 ```text
 [Dados de Mercado em Tempo Real (WebSockets & REST Spot/Futures)]
@@ -35,142 +38,65 @@ O **SpotBot Pro v7.0** opera sob o conceito de **Filtros Quantitativos Hierárqu
   [Camada 0: AI Panic News Scanner (CryptoPanic + Gemini IA)]
                        │ (Trava compras se Sentiment Score < 30)
                        ▼
-  [Camada 1: Matriz Multi-Timeframe (4H + 1H + 15M)]
-                       │ (Exige Confluência Score >= 70%)
+  [Camada 1: Matriz Multi-Timeframe (4H + 1H + 15M) & Regime Shield]
+                       │ (Exige Confluência e bloqueia contra a tendência macro do BTC)
                        ▼
   [Camada 2: Lead-Lag Alpha Engine (BTC 1m Lead Momentum)]
-                       │ (Antecipa impulso de volume do BTC em altcoins)
+                       │ (Antecipa impulso de volume do BTC em altcoins da Elite)
                        ▼
   [Camada 3: Order Flow CVD Tape Reading (500 Market Trades)]
-                       │ (Confirma agressão compradora >= 60% e CVD > 0)
+                       │ (Confirma agressão compradora/vendedora)
                        ▼
-  [Camada 4: Cointegration Stat-Arb Z-Score (Spread vs BTC)]
-                       │ (Captura reversão à média quando Z <= -2.0 sigma)
+  [Camada 4: Candle Shield & Anti-Faca Caindo]
+                       │ (Bloqueia entradas em velas de rejeição ou exaustão violenta)
                        ▼
-  [Camada 5: Whale Wall Protection (Livro 50 Depth)]
-                       │ (Recua TP em 0.15% antes de muros de venda >= $25k)
+  [Camada 5: Sniper Mode Observation]
+                       │ (Aguarda até 3 minutos pela exaustão para obter o melhor preço)
                        ▼
-  [Camada 6: Dynamic ATR Volatility SL/TP Protection]
-                       │ (Ajusta Stop Loss entre -1.2% e -3.0% por ATR)
+  [Camada 6: Dynamic Risk Sizing & Dynamic Leverage Engine]
+                       │ (Calcula risco em $ e alavancagem até 50x sob medida)
                        ▼
-  [Camada 7: Kelly Criterion Position Sizing Engine]
-                       │ (Dimensiona lote ótimo Half-Kelly com base no SQLite)
+  [Camada 7: Liquidation Risk-Buffer Guard]
+                       │ (Garante buffer de segurança > 1.5x entre SL e Preço de Liquidação)
                        ▼
-  [Camada 8: Ordem OCO, Smart Recovery DCA em Fibonacci 61.8% & Telegram]
+  [Camada 8: Ordem a Mercado + OCO/Condicionais + Trailing Lock Monitor 1s]
 ```
 
 ---
 
-# CAPÍTULO 2: EQUAÇÕES MATEMÁTICAS E MODELOS QUANTITATIVOS
+# CAPÍTULO 2: GESTÃO DE RISCO E DIMENSIONAMENTO DE CAPITAL
 
-## 2.1 Critério de Kelly & Dimensionamento por Probabilidade (Kelly Position Sizing)
-Em vez de lotes intuitivos, a alocação ótima $f^*$ de capital por operação é calculada matematicamente via **Fórmula do Critério de Kelly**:
+### 1. Dimensionamento Dinâmico por Risco Escalonado
+Para assegurar a operacionalidade tanto de contas institucionais quanto de pequenas contas de teste, o risco percentual é ajustado de forma inversamente proporcional à magnitude da banca:
 
-$$f^* = \frac{p \cdot b - (1 - p)}{b}$$
+| Saldo Total (USDT) | Risco por Trade (%) | Finalidade Estratégica |
+| :--- | :--- | :--- |
+| $\le \$200$ | **8.0%** | Superação de regras de valor nocional mínimo da exchange |
+| $\$201$ a $\$1.000$ | **5.0%** | Fase de alavancagem de crescimento inicial |
+| $\$1.001$ a $\$3.000$ | **3.0%** | Perfil equilibrado de transição |
+| $> \$3.000$ | **2.0%** | Gestão institucional padrão Hedge Fund |
 
-Onde:
-- $p$: Taxa de Vitória real (*Win Rate*) extraída do banco de dados SQLite (`db.get_stats()`).
-- $b$: Payoff Ratio da estratégia ($b = \frac{\text{Take Profit \%}}{\text{Stop Loss \%}} \approx 2.0$).
-- **Half-Kelly Safety**: Para eliminar qualquer risco de ruína, o robô aplica a fração defensiva:
-  $$\text{Kelly}_{\text{Lote}} = \text{Saldo}_{\text{USDT}} \times \max\left(0.10, \min\left(0.40, 0.5 \cdot f^*\right)\right)$$
+### 2. Dimensionamento da Posição (Notional)
+$$\text{Notional (USDT)} = \left(\frac{\text{Risco Aceito (USDT)}}{|\text{Preço de Entrada} - \text{Stop Loss}|}\right) \times \text{Preço de Entrada}$$
 
----
-
-## 2.2 Cointegração e Arbitragem Estatística de Pares (Pair Trading Z-Score)
-Para dois ativos cointegrados $A$ e $B$ (ex: `SOLUSDT` vs `BTCUSDT`), a razão de preço instantânea é definida como $R_t = \frac{P_{A, t}}{P_{B, t}}$.
-
-O **Z-Score** do spread em relação à média móvel $\mu_R$ e desvio-padrão $\sigma_R$ dos últimos 50 períodos é dado por:
-
-$$Z_t = \frac{R_t - \mu_R}{\sigma_R}$$
-
-- **Condição de Entrada**: Se $Z_t \le -2.0\sigma$, o Ativo $A$ está estatisticamente subavaliado em relação ao Ativo $B$. O algoritmo autoriza a compra por **Reversão à Média (Mean Reversion)**.
+* **Hard Cap de Exposição:** A exposição nocional máxima permitida por operação é limitada a $10\times$ o saldo total da conta.
 
 ---
 
-## 2.3 Order Flow Cumulative Volume Delta (CVD Tape Reading)
-Mede a agressão das ordens executadas a mercado (*Market Orders*) nas últimas 500 transações spot:
+# CAPÍTULO 3: MOTOR DE ALAVANCAGEM DINÂMICA (ISOLATED)
 
-$$\text{CVD} = \sum V_{\text{Market Buy}} - \sum V_{\text{Market Sell}}$$
+A alavancagem não é parametrizada estaticamente; ela é determinada pela distância percentual do Stop Loss:
 
-$$\text{Buy Ratio \%} = \frac{\sum V_{\text{Market Buy}}}{\sum V_{\text{Market Buy}} + \sum V_{\text{Market Sell}}} \times 100$$
+$$\text{Alavancagem} = \min\left(50, \max\left(1, \frac{1}{\text{Distância SL \%} \times 2.0}\right)\right)$$
 
-- **Gatilho Bullish**: Ativado se $\text{Buy Ratio \%} \ge 60.0\%$ e $\text{CVD} > 0$.
-- **Multiplicador de Ouro (2.0x)**: Ativado se $\text{CVD} \ge +\$50.000\text{ USDT}$.
+* **Margem Isolada:** Todo trade de futuros é executado obrigatoriamente no modo `ISOLATED`, isolando o risco estritamente à margem alocada no trade.
 
 ---
 
-## 2.4 Correlation Lead-Lag Alpha Engine (Impulso BTC 1m)
-Avalia a variação percentual de preço e volume do `BTCUSDT` nas velas de 1 minuto:
+# CAPÍTULO 4: MOTOR DE PROTEÇÃO EM TEMPO REAL (TRAILING LOCK)
 
-$$\Delta P_{\text{BTC}} = \frac{P_{\text{BTC, t}} - P_{\text{BTC, t-3}}}{P_{\text{BTC, t-3}}} \times 100$$
+Executado continuamente com latência de 1 segundo sobre o retorno sobre capital próprio ($\text{ROI}$):
 
-- **Sinal de Antecipação**: Se $\Delta P_{\text{BTC}} \ge +0.25\%$ em 3m com volume $1.5\times$ acima da média e a altcoin do Top 40 ainda não acompanhou ($\Delta P_{\text{Alt}} \le 0.7 \times \Delta P_{\text{BTC}}$), entra comprado antecipadamente na altcoin com multiplicador **1.5x**.
-
----
-
-## 2.5 Smart Recovery DCA em Suportes de Fibonacci
-Identifica a oscilação recente de preço ($\text{Swing High}$ e $\text{Swing Low}$) nas últimas 50 velas de 15m:
-
-$$\text{Diff} = \text{Swing High} - \text{Swing Low}$$
-
-$$\text{Fib}_{61.8\%} = \text{Swing High} - (\text{Diff} \times 0.618)$$
-
-$$\text{Fib}_{786\%} = \text{Swing High} - (\text{Diff} \times 0.786)$$
-
-- **Execução do DCA**: Se a altcoin sofrer um *flash dump* de pavio atingindo $\text{Fib}_{61.8\%}$, executa recompra de 50%, recalcula o Preço Médio ($PM = \frac{q_1 p_1 + q_2 p_2}{q_1 + q_2}$) e re-posiciona a ordem OCO com Take Profit em apenas **$+0.8\%$ acima do novo $PM$**.
-
----
-
-# CAPÍTULO 3: ESTRUTURA MODULAR DO CÓDIGO
-
-```text
-spotbot/
-│
-├── config/                  # Configurações centralizadas e leitura do .env
-│   └── settings.py          # API_KEYS, TELEGRAM_CONFIG, TRADING_CONFIG, RSI_CONFIG, TOP_20_SYMBOLS.
-│
-├── core/                    # Núcleo de Engenharia Quantitativa v5.0
-│   ├── engine.py            # Loop principal assíncrono, Telegram Bot, OCO Lifecycle & Smart Recovery DCA.
-│   ├── decision.py          # Decision engine: MTF, Whale Walls, ATR, Lead-Lag, Stat-Arb, CVD & Kelly Sizing.
-│   ├── indicators.py        # Algoritmos quantitativos: MTF Score, Fibonacci, CVD, Z-Score, ATR, RSI, MACD.
-│   ├── patterns.py          # Reconhecimento de padrões de velas de alta precisão.
-│   └── post_trade.py        # Processamento de ordens OCO, taxas BNB e registro de dados.
-│
-├── services/                # Conectores e Serviços de Dados
-│   ├── binance_client.py    # Cliente assíncrono Binance (Spot & Futures API, Klines 3-Timeframe, Trades 500).
-│   ├── database.py          # Gerenciador de Banco de Dados SQLite transacional.
-│   ├── gemini_ai.py         # Classificador de Sentimento e Pânico Noticioso via IA Gemini 2.5 Flash.
-│   ├── news_scanner.py      # Coletor de manchetes de notícias em tempo real (CryptoPanic API).
-│   ├── pdf_generator.py     # Gerador de Relatório Semanal de Telemetria em PDF ReportLab.
-│   └── telegram_notifier.py # Conector assíncrono Telegram Bot API.
-│
-├── ui/                      # Interface Web NiceGUI
-│   └── dashboard.py         # Terminal Web Institucional NiceGUI, gráficos Plotly e cards holográficos.
-│
-├── scratch/                 # Scripts de Testes Quantitativos
-│   ├── test_smart_recovery_dca.py
-│   ├── test_lead_lag_alpha.py
-│   ├── test_order_flow_cvd.py
-│   ├── test_stat_arb_pairs.py
-│   └── test_kelly_sizing.py
-│
-└── run.py                   # Ponto de entrada unificado com CLI argparse (--mode dashboard).
-```
-
----
-
-# CAPÍTULO 4: PROCEDIMENTOS DE OPERAÇÃO E INSTALAÇÃO
-
-1. **Ativação do Ambiente Virtual**:
-   ```powershell
-   .\env_spotbot\Scripts\activate
-   ```
-2. **Instalação de Dependências**:
-   ```powershell
-   pip install -r requirements.txt
-   ```
-3. **Execução do Robô com Interface Web**:
-   ```powershell
-   python run.py --mode dashboard
-   ```
-4. **Navegador**: `http://localhost:8080`
+1. **Take-Profit Máximo:** Fechamento a mercado imediato ao atingir $\text{ROI} \ge +5.50\%$.
+2. **Trailing Lock Dinâmico:** Se $\text{Peak ROI} \ge +3.00\%$ e o recuo do pico for $\ge 3.00\%$, liquida a mercado garantindo saída com lucro/breakeven.
+3. **Stop Preventivo Antecipado:** Se $\text{ROI} \le -9.00\%$, fecha a mercado antes do Stop Loss rígido, reduzindo a perda pela metade.
