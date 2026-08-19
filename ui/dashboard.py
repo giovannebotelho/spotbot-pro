@@ -30,6 +30,7 @@ logs_buffer = collections.deque(maxlen=50)
 _last_chart_sig = None
 _last_fut_chart_sig = None
 _last_trades_sig = None
+_last_tables_fetch = 0
 
 log_ui = None
 status_ui = None
@@ -487,8 +488,11 @@ async def update_data():
                 ai_signal_label.classes(remove='text-emerald-400 text-rose-400', add='text-amber-400')
             ai_reason_markdown.content = insight.get('justification', '**Sem justificativa disponível.**')
 
-        # Atualiza o Histórico de Posições e Ordens da Binance
-        if getattr(engine, 'client', None):
+        # Atualiza o Histórico de Posições e Ordens da Binance (com throttle inteligente de 25 segundos)
+        global _last_tables_fetch
+        now_ts = time.time() if 'time' in globals() else dt_module.datetime.now().timestamp()
+        if getattr(engine, 'client', None) and (now_ts - _last_tables_fetch > 25):
+            _last_tables_fetch = now_ts
             try:
                 from services.binance_client import fetch_binance_futures_trades, fetch_binance_futures_orders
                 
