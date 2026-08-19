@@ -20,6 +20,10 @@ from core.futures_state import futures_state
 
 db = DatabaseManager()
 
+# Cache para os cards do painel inferior
+_cached_pos_rows = []
+_cached_ord_rows = []
+
 # Registro de arquivos estáticos (Favicon e Logo)
 assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets')
 if os.path.exists(assets_dir):
@@ -243,25 +247,71 @@ async def change_chart_asset(val):
         print(f"Aviso ao alterar gráfico para {base_val}: {e}")
 
 @ui.refreshable
-def render_chart_tabs():
-    global chart_tabs, selected_chart_symbol, _last_rendered_tabs
-    
-    chart_tabs = ui.tabs(on_change=lambda e: asyncio.create_task(change_chart_asset(e.value))).props('dense active-color=sky-400 indicator-color=sky-400 text-color=slate-400 no-caps').classes('bg-transparent min-h-[40px] text-xs')
-    with chart_tabs:
-        ui.tab('foco', label='⚡ Foco do Bot (Scanner)', icon='center_focus_strong')
-        for sym in sorted(_last_rendered_tabs):
-            base_sym = sym.replace('_spot', '').replace('_fut', '')
-            is_spot = sym.endswith('_spot')
-            is_fut = sym.endswith('_fut')
-            label_suffix = '(OCO)' if is_spot else '(FUT)'
-            icon = 'show_chart' if is_spot else 'rocket_launch'
+def render_positions_panel():
+    global _cached_pos_rows
+    if not _cached_pos_rows:
+        with ui.column().classes('w-full py-8 items-center justify-center text-slate-500 gap-2'):
+            ui.label('⚡ Monitorando novas operações de Futuros...').classes('text-xs font-mono')
+            ui.label('Nenhuma posição finalizada nas últimas horas.').classes('text-[0.65rem] text-slate-600')
+        return
+
+    with ui.column().classes('w-full gap-2 p-1'):
+        for p in _cached_pos_rows:
+            pnl_color = 'text-emerald-400' if not p.get('pnl', '').startswith('-') else 'text-rose-400'
+            pnl_bg = 'bg-emerald-500/10 border-emerald-500/30' if not p.get('pnl', '').startswith('-') else 'bg-rose-500/10 border-rose-500/30'
             
-            ui.tab(sym, label=f'🪙 {base_sym} {label_suffix}' if is_spot else f'🚀 {base_sym} {label_suffix}', icon=icon).classes('text-sky-400' if is_spot else 'text-rose-400')
+            with ui.row().classes(f'w-full justify-between items-center p-2.5 rounded-xl glass-panel border {pnl_bg} shadow-sm gap-2'):
+                with ui.row().classes('items-center gap-2 min-w-[140px]'):
+                    ui.label(p.get('symbol', 'BTCUSDT')).classes('font-bold text-xs text-white font-mono')
+                    ui.label(p.get('leverage', '15x')).classes('text-[0.6rem] bg-slate-800 text-sky-400 px-1.5 py-0.5 rounded font-mono font-semibold')
+                    ui.label(p.get('status', 'Fechada')).classes('text-[0.6rem] text-slate-400')
+                
+                with ui.row().classes('items-center gap-4 text-xs font-mono flex-wrap'):
+                    with ui.column().classes('gap-0 items-end'):
+                        ui.label('PnL Realizado').classes('text-[0.6rem] text-slate-500')
+                        ui.label(p.get('pnl', '$0.00')).classes(f'font-bold {pnl_color}')
+                    with ui.column().classes('gap-0 items-end hidden sm:flex'):
+                        ui.label('ROI').classes('text-[0.6rem] text-slate-500')
+                        ui.label(p.get('roi', '0.0%')).classes(f'font-bold {pnl_color}')
+                    with ui.column().classes('gap-0 items-end hidden md:flex'):
+                        ui.label('Entrada / Saída').classes('text-[0.6rem] text-slate-500')
+                        ui.label(f"{p.get('entry', '$0.00')} ➔ {p.get('exit', '$0.00')}").classes('text-slate-300')
+                    with ui.column().classes('gap-0 items-end'):
+                        ui.label('Horário').classes('text-[0.6rem] text-slate-500')
+                        ui.label(p.get('time', 'Hoje')).classes('text-slate-400')
+
+@ui.refreshable
+def render_orders_panel():
+    global _cached_ord_rows
+    if not _cached_ord_rows:
+        with ui.column().classes('w-full py-8 items-center justify-center text-slate-500 gap-2'):
+            ui.label('⚡ Monitorando livro de ordens ativas...').classes('text-xs font-mono')
+            ui.label('Nenhuma ordem recente no buffer.').classes('text-[0.65rem] text-slate-600')
+        return
+
+    with ui.column().classes('w-full gap-2 p-1'):
+        for o in _cached_ord_rows:
+            side_color = 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10' if o.get('side') == 'COMPRAR' else 'text-rose-400 border-rose-500/40 bg-rose-500/10'
             
-    if selected_chart_symbol and selected_chart_symbol in _last_rendered_tabs:
-        chart_tabs.value = selected_chart_symbol
-    else:
-        chart_tabs.value = 'foco'
+            with ui.row().classes('w-full justify-between items-center p-2.5 rounded-xl glass-panel border border-white/5 shadow-sm gap-2'):
+                with ui.row().classes('items-center gap-2 min-w-[140px]'):
+                    ui.label(o.get('symbol', 'BTCUSDT')).classes('font-bold text-xs text-white font-mono')
+                    ui.label(o.get('side', 'COMPRAR')).classes(f'text-[0.6rem] px-1.5 py-0.5 rounded font-mono font-bold border {side_color}')
+                    ui.label(o.get('type', 'MARKET')).classes('text-[0.6rem] text-slate-400 font-mono')
+                
+                with ui.row().classes('items-center gap-4 text-xs font-mono flex-wrap'):
+                    with ui.column().classes('gap-0 items-end'):
+                        ui.label('Preço Médio').classes('text-[0.6rem] text-slate-500')
+                        ui.label(o.get('avg_price', '$0.00')).classes('font-bold text-slate-200')
+                    with ui.column().classes('gap-0 items-end hidden sm:flex'):
+                        ui.label('Executado / Valor').classes('text-[0.6rem] text-slate-500')
+                        ui.label(f"{o.get('executed', '0.000')} ({o.get('value', '$0.00')})").classes('text-slate-300')
+                    with ui.column().classes('gap-0 items-end hidden md:flex'):
+                        ui.label('Status').classes('text-[0.6rem] text-slate-500')
+                        ui.label(o.get('status', 'Executado')).classes('text-sky-400 font-bold')
+                    with ui.column().classes('gap-0 items-end'):
+                        ui.label('Horário').classes('text-[0.6rem] text-slate-500')
+                        ui.label(o.get('time', 'Hoje')).classes('text-slate-400')
 
 async def update_data():
     global start_btn, stop_btn, status_indicator, _last_chart_sig, total_profit_val, win_rate_val, futures_usdt_val, futures_profit_val, futures_win_rate_val
@@ -514,7 +564,7 @@ async def update_data():
             ai_reason_markdown.content = insight.get('justification', '**Sem justificativa disponível.**')
 
         # Atualiza o Histórico de Posições e Ordens da Binance (com throttle inteligente de 25 segundos)
-        global _last_tables_fetch
+        global _last_tables_fetch, _cached_pos_rows, _cached_ord_rows
         now_ts = time.time() if 'time' in globals() else dt_module.datetime.now().timestamp()
         if getattr(engine, 'client', None) and (now_ts - _last_tables_fetch > 25):
             _last_tables_fetch = now_ts
@@ -522,8 +572,8 @@ async def update_data():
                 from services.binance_client import fetch_binance_futures_trades, fetch_binance_futures_orders
                 
                 # 1. Posições Fechadas / Trades com PnL
-                if futures_positions_table:
-                    b_trades = await fetch_binance_futures_trades(engine.client, limit=20)
+                b_trades = await fetch_binance_futures_trades(engine.client, limit=20)
+                if b_trades:
                     pos_rows = []
                     for t in b_trades:
                         t_pnl = float(t.get('realizedPnl', 0.0))
@@ -531,7 +581,6 @@ async def update_data():
                         t_price = float(t.get('price', 0.0))
                         t_time_ms = int(t.get('time', 0))
                         t_time_str = dt_module.datetime.fromtimestamp(t_time_ms/1000).strftime('%d/%m %H:%M')
-                        t_side = "Compra (LONG)" if t.get('buyer', False) else "Venda (SHORT)"
                         pnl_str = f"+${t_pnl:.2f}" if t_pnl >= 0 else f"-${abs(t_pnl):.2f}"
                         
                         pos_rows.append({
@@ -545,11 +594,12 @@ async def update_data():
                             'exit': f"${t_price:.4f}",
                             'time': t_time_str
                         })
-                    futures_positions_table.rows = pos_rows
+                    _cached_pos_rows = pos_rows
+                    render_positions_panel.refresh()
                 
                 # 2. Histórico de Ordens
-                if futures_orders_table:
-                    b_orders = await fetch_binance_futures_orders(engine.client, limit=20)
+                b_orders = await fetch_binance_futures_orders(engine.client, limit=20)
+                if b_orders:
                     ord_rows = []
                     for o in b_orders:
                         o_time = dt_module.datetime.fromtimestamp(int(o.get('time', o.get('updateTime', 0)))/1000).strftime('%d/%m %H:%M:%S')
@@ -570,11 +620,12 @@ async def update_data():
                             'reduce_only': 'Sim' if o.get('reduceOnly') else 'Não',
                             'status': 'Executado' if o.get('status') == 'FILLED' else o.get('status', 'NEW')
                         })
-                    futures_orders_table.rows = ord_rows
+                    _cached_ord_rows = ord_rows
+                    render_orders_panel.refresh()
 
             except Exception as hist_err:
                 pass
-        elif futures_positions_table and not futures_positions_table.rows:
+        elif not _cached_pos_rows:
             # Fallback inicial usando o Banco de Dados para que as tabelas já venham preenchidas
             try:
                 recent_df = await asyncio.to_thread(db.get_recent_trades, limit=15)
@@ -596,7 +647,8 @@ async def update_data():
                             'exit': f"${float(row.get('Preço de Saída', 0.0)):.4f}" if float(row.get('Preço de Saída', 0.0)) > 0 else "N/A",
                             'time': str(row.get('Data/Hora da Compra', row.get('oco_timestamp', 'Hoje')))
                         })
-                    futures_positions_table.rows = db_rows
+                    _cached_pos_rows = db_rows
+                    render_positions_panel.refresh()
             except Exception:
                 pass
 
@@ -749,7 +801,50 @@ async def index():
     global total_profit_val, win_rate_val, recent_trades_table, status_indicator, candle_chart, scanner_table, futures_candle_chart, futures_chart_symbol_badge
     global ai_signal_label, ai_reason_markdown, ai_reason_container, ai_card, risk_profile_select, paper_trading_switch
     global chart_symbol_badge, start_btn, stop_btn, cancel_btn, futures_usdt_val, futures_profit_val, futures_win_rate_val
+    global _cached_pos_rows, _cached_ord_rows
     
+    # Pré-carrega o cache do banco de dados na montagem da página
+    if not _cached_pos_rows:
+        try:
+            df_init = db.get_recent_trades(limit=15)
+            if not df_init.empty:
+                db_pos = []
+                db_ord = []
+                for _, row in df_init.iterrows():
+                    pnl_val = float(row.get('Resultado Total Liquido', row.get('trade_result_net', 0.0)))
+                    sym = row.get('Símbolo', row.get('symbol', 'BTCUSDT'))
+                    m_type = row.get('market_type', 'FUTURES')
+                    direction = row.get('direction', 'LONG')
+                    pnl_s = f"+${pnl_val:.2f}" if pnl_val >= 0 else f"-${abs(pnl_val):.2f}"
+                    
+                    db_pos.append({
+                        'symbol': f"{sym} {'Perp' if m_type == 'FUTURES' else 'Spot'}",
+                        'leverage': '15x Isolada' if m_type == 'FUTURES' else '1x Spot',
+                        'status': 'Fechada',
+                        'pnl': pnl_s,
+                        'roi': f"{(pnl_val / 50.0) * 100:+.2f}%",
+                        'qty': '0.050',
+                        'entry': f"${float(row.get('Preço de Entrada', 0.0)):.4f}" if float(row.get('Preço de Entrada', 0.0)) > 0 else "N/A",
+                        'exit': f"${float(row.get('Preço de Saída', 0.0)):.4f}" if float(row.get('Preço de Saída', 0.0)) > 0 else "N/A",
+                        'time': str(row.get('Data/Hora da Compra', row.get('oco_timestamp', 'Hoje')))
+                    })
+                    db_ord.append({
+                        'time': str(row.get('Data/Hora da Compra', row.get('oco_timestamp', 'Hoje'))),
+                        'symbol': sym,
+                        'type': 'MARKET',
+                        'side': 'COMPRAR' if direction == 'LONG' else 'VENDER',
+                        'avg_price': f"${float(row.get('Preço de Entrada', 0.0)):.4f}" if float(row.get('Preço de Entrada', 0.0)) > 0 else "N/A",
+                        'price': 'Mercado',
+                        'executed': '0.050',
+                        'value': '$95.78',
+                        'reduce_only': 'Não',
+                        'status': 'Executado'
+                    })
+                _cached_pos_rows = db_pos
+                _cached_ord_rows = db_ord
+        except Exception:
+            pass
+
     ui.colors(primary='#0ea5e9', secondary='#64748b', accent='#10b981', positive='#10b981', negative='#f43f5e', dark='#020617')
     
     ui.add_head_html('''
@@ -1077,71 +1172,17 @@ async def index():
                     tab_logs = ui.tab('terminal', label='💻 Terminal Sincronizado', icon='terminal').classes('font-bold')
 
                 with ui.tab_panels(bottom_tabs, value='positions').classes('w-full p-0 bg-[#0B0E11]/90 text-xs min-h-[320px]'):
-                    # 1. Painel de Posições Fechadas (Estilo Binance Print 1)
+                    # 1. Painel de Posições Fechadas (Cards Glassmorphism Nativos Estilo Binance)
                     with ui.tab_panel('positions').classes('p-2 w-full'):
                         with ui.row().classes('w-full items-center justify-between pb-2 text-[0.65rem] text-slate-400 border-b border-white/5'):
                             ui.label('* Dados sincronizados diretamente da Binance Futures API / Banco de Dados.').classes('italic text-slate-500')
                             ui.label('Filtro: Todos os Pares Elite').classes('font-mono text-emerald-400')
                         
-                        # Carrega dados do DB na montagem inicial
-                        initial_pos_rows = []
-                        try:
-                            df_init = db.get_recent_trades(limit=15)
-                            if not df_init.empty:
-                                for _, row in df_init.iterrows():
-                                    pnl_val = float(row.get('Resultado Total Liquido', row.get('trade_result_net', 0.0)))
-                                    sym = row.get('Símbolo', row.get('symbol', 'BTCUSDT'))
-                                    m_type = row.get('market_type', 'FUTURES')
-                                    pnl_s = f"+${pnl_val:.2f}" if pnl_val >= 0 else f"-${abs(pnl_val):.2f}"
-                                    initial_pos_rows.append({
-                                        'symbol': f"{sym} {'Perp' if m_type == 'FUTURES' else 'Spot'}",
-                                        'leverage': '15x Isolada' if m_type == 'FUTURES' else '1x Spot',
-                                        'status': 'Fechada',
-                                        'pnl': pnl_s,
-                                        'roi': f"{(pnl_val / 50.0) * 100:+.2f}%",
-                                        'qty': '0.050',
-                                        'entry': f"${float(row.get('Preço de Entrada', 0.0)):.4f}" if float(row.get('Preço de Entrada', 0.0)) > 0 else "$1,915.75",
-                                        'exit': f"${float(row.get('Preço de Saída', 0.0)):.4f}" if float(row.get('Preço de Saída', 0.0)) > 0 else "$1,930.83",
-                                        'time': str(row.get('Data/Hora da Compra', row.get('oco_timestamp', 'Hoje')))
-                                    })
-                        except Exception:
-                            pass
+                        render_positions_panel()
 
-                        futures_positions_table = ui.table(
-                            columns=get_binance_positions_columns(),
-                            rows=initial_pos_rows,
-                            row_key='time'
-                        ).classes('w-full bg-transparent text-xs text-slate-300').props('dense flat dark')
-
-                    # 2. Painel de Ordens (Estilo Binance Print 2)
+                    # 2. Painel de Ordens (Cards Glassmorphism Nativos Estilo Binance)
                     with ui.tab_panel('orders').classes('p-2 w-full'):
-                        initial_ord_rows = []
-                        try:
-                            df_init = db.get_recent_trades(limit=15)
-                            if not df_init.empty:
-                                for _, row in df_init.iterrows():
-                                    sym = row.get('Símbolo', row.get('symbol', 'BTCUSDT'))
-                                    direction = row.get('direction', 'LONG')
-                                    initial_ord_rows.append({
-                                        'time': str(row.get('Data/Hora da Compra', row.get('oco_timestamp', 'Hoje'))),
-                                        'symbol': sym,
-                                        'type': 'MARKET',
-                                        'side': 'COMPRAR' if direction == 'LONG' else 'VENDER',
-                                        'avg_price': f"${float(row.get('Preço de Entrada', 0.0)):.4f}" if float(row.get('Preço de Entrada', 0.0)) > 0 else "$1,915.75",
-                                        'price': 'Mercado',
-                                        'executed': '0.050',
-                                        'value': '$95.78',
-                                        'reduce_only': 'Não',
-                                        'status': 'Executado'
-                                    })
-                        except Exception:
-                            pass
-
-                        futures_orders_table = ui.table(
-                            columns=get_binance_orders_columns(),
-                            rows=initial_ord_rows,
-                            row_key='time'
-                        ).classes('w-full bg-transparent text-xs text-slate-300').props('dense flat dark')
+                        render_orders_panel()
 
                     # 3. Heatmap de Liquidez e Profundidade de Livro (Depth Heatmap)
                     with ui.tab_panel('depth').classes('p-3 w-full'):

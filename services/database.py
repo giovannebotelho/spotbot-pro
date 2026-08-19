@@ -5,7 +5,7 @@ import warnings
 import datetime as dt_module
 from datetime import datetime
 from pathlib import Path
-from config.settings import DATABASE_URL, BASE_DIR, TIMEZONE
+from config.settings import DATABASE_URL, BASE_DIR, TIMEZONE, STATS_BASELINE_ID
 from zoneinfo import ZoneInfo
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -319,28 +319,30 @@ class DatabaseManager:
             conn = self.get_connection()
             try:
                 cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) as total FROM trades WHERE market_type = 'SPOT' OR market_type IS NULL")
+                baseline_clause = f"AND id >= {STATS_BASELINE_ID}" if STATS_BASELINE_ID > 0 else ""
+                
+                cursor.execute(f"SELECT COUNT(*) as total FROM trades WHERE (market_type = 'SPOT' OR market_type IS NULL) {baseline_clause}")
                 row = cursor.fetchone()
                 spot_trades = row["total"] if self.is_postgres else row[0]
                 
-                cursor.execute("SELECT COUNT(*) as wins FROM trades WHERE (oco_result = 'profit' OR trade_result_net > 0) AND (market_type = 'SPOT' OR market_type IS NULL)")
+                cursor.execute(f"SELECT COUNT(*) as wins FROM trades WHERE (oco_result = 'profit' OR trade_result_net > 0) AND (market_type = 'SPOT' OR market_type IS NULL) {baseline_clause}")
                 row_wins = cursor.fetchone()
                 spot_wins = row_wins["wins"] if self.is_postgres else row_wins[0]
                 
-                cursor.execute("SELECT COUNT(*) as total FROM trades WHERE market_type = 'FUTURES'")
+                cursor.execute(f"SELECT COUNT(*) as total FROM trades WHERE market_type = 'FUTURES' {baseline_clause}")
                 row_fut = cursor.fetchone()
                 futures_trades = row_fut["total"] if self.is_postgres else row_fut[0]
 
-                cursor.execute("SELECT COUNT(*) as wins FROM trades WHERE trade_result_net > 0 AND market_type = 'FUTURES'")
+                cursor.execute(f"SELECT COUNT(*) as wins FROM trades WHERE trade_result_net > 0 AND market_type = 'FUTURES' {baseline_clause}")
                 row_fut_wins = cursor.fetchone()
                 futures_wins = row_fut_wins["wins"] if self.is_postgres else row_fut_wins[0]
 
-                cursor.execute("SELECT SUM(trade_result_net) as net_sum FROM trades WHERE market_type = 'SPOT' OR market_type IS NULL")
+                cursor.execute(f"SELECT SUM(trade_result_net) as net_sum FROM trades WHERE (market_type = 'SPOT' OR market_type IS NULL) {baseline_clause}")
                 row_sum = cursor.fetchone()
                 result = row_sum["net_sum"] if self.is_postgres else row_sum[0]
                 spot_net_profit = float(result) if result is not None else 0.0
 
-                cursor.execute("SELECT SUM(trade_result_net) as net_sum FROM trades WHERE market_type = 'FUTURES'")
+                cursor.execute(f"SELECT SUM(trade_result_net) as net_sum FROM trades WHERE market_type = 'FUTURES' {baseline_clause}")
                 row_fut_sum = cursor.fetchone()
                 fut_result = row_fut_sum["net_sum"] if self.is_postgres else row_fut_sum[0]
                 futures_net_profit = float(fut_result) if fut_result is not None else 0.0
@@ -350,7 +352,7 @@ class DatabaseManager:
                 total_net_profit = spot_net_profit + futures_net_profit
                 
                 # Cálculo de Métricas Quantitativas de Hedge Fund (Sharpe Ratio, Profit Factor, Max Drawdown)
-                cursor.execute("SELECT trade_result_net FROM trades WHERE trade_result_net IS NOT NULL ORDER BY id ASC")
+                cursor.execute(f"SELECT trade_result_net FROM trades WHERE trade_result_net IS NOT NULL {baseline_clause} ORDER BY id ASC")
                 pnls_raw = cursor.fetchall()
                 pnls = [float(r["trade_result_net"] if self.is_postgres else r[0]) for r in pnls_raw] if pnls_raw else []
 

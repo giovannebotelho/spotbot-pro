@@ -190,7 +190,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 except Exception as e:
                     log(f"⚠️ Erro ao analisar BTCUSDT para filtro de mercado: {e}")
                 # ---------------------------------------------
-                # 0. Circuit Breaker Diário (-5.0% Max Daily Drawdown)
+                # 0. Circuit Breaker Diário (-30.0% Max Daily Drawdown na Testnet)
                 import datetime as dt_module
                 now_brt = dt_module.datetime.now(TIMEZONE)
                 current_day = now_brt.strftime("%Y-%m-%d")
@@ -210,9 +210,9 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 cur_total_bal = await get_futures_usdt_total_balance(client)
                 if daily_starting_balance > 0:
                     daily_dd_pct = ((cur_total_bal - daily_starting_balance) / daily_starting_balance) * 100
-                    if daily_dd_pct <= -5.0:
+                    if daily_dd_pct <= -30.0:
                         circuit_breaker_active_until = time.time() + (6 * 3600)  # Pausa de 6 horas
-                        log(f"🚨 [CIRCUIT-BREAKER ATIVADO] Prejuízo diário de {daily_dd_pct:.2f}% atingiu limite de -5.0%! Pausando novas entradas por 6 horas.")
+                        log(f"🚨 [CIRCUIT-BREAKER ATIVADO] Prejuízo diário de {daily_dd_pct:.2f}% atingiu limite de -30.0%! Pausando novas entradas por 6 horas.")
                         if TELEGRAM_CONFIG.get('bot_token') and TELEGRAM_CONFIG.get('chat_id'):
                             asyncio.create_task(send_telegram_message(
                                 TELEGRAM_CONFIG['bot_token'], TELEGRAM_CONFIG['chat_id'],

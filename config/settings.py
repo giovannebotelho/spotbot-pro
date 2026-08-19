@@ -115,6 +115,7 @@ RISK_PROFILES = {
 ACTIVE_RISK_PROFILE = 'Moderado'
 PAPER_TRADING_MODE = True # Ativa o uso da Binance Testnet
 PAPER_TRADING = False
+STATS_BASELINE_ID = 9999999 # Reseta contadores visuais de performance para o novo ciclo v7.0.1
 
 RSI_CONFIG = {
     'levels': [25, 23, 20, 18, 15, 12],
