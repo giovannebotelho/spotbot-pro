@@ -312,3 +312,44 @@ async def get_futures_klines(client, symbol, interval, limit):
     """Obtém as velas (klines) para um símbolo de Futuros específicos."""
     return await client.futures_klines(symbol=symbol, interval=interval, limit=limit)
 
+async def fetch_binance_futures_trades(client, symbol=None, limit=50):
+    """Busca as execuções e posições fechadas recentes com PnL direto da Binance Futures."""
+    try:
+        if symbol:
+            return await client.futures_account_trades(symbol=symbol, limit=limit)
+        else:
+            # Se não passar símbolo, busca dos Top 6 ativos e combina
+            from config.settings import TOP_10_FUTURES_SYMBOLS
+            tasks = [client.futures_account_trades(symbol=s, limit=20) for s in TOP_10_FUTURES_SYMBOLS]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            all_trades = []
+            for r in results:
+                if isinstance(r, list):
+                    all_trades.extend(r)
+            # Ordena por timestamp decrescente
+            all_trades.sort(key=lambda x: int(x.get('time', 0)), reverse=True)
+            return all_trades[:limit]
+    except Exception as e:
+        print(f"⚠️ Erro ao buscar histórico de trades da Binance: {e}")
+        return []
+
+async def fetch_binance_futures_orders(client, symbol=None, limit=50):
+    """Busca todas as ordens recentes (preenchidas e canceladas) da Binance Futures."""
+    try:
+        if symbol:
+            return await client.futures_get_all_orders(symbol=symbol, limit=limit)
+        else:
+            from config.settings import TOP_10_FUTURES_SYMBOLS
+            tasks = [client.futures_get_all_orders(symbol=s, limit=15) for s in TOP_10_FUTURES_SYMBOLS]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            all_orders = []
+            for r in results:
+                if isinstance(r, list):
+                    all_orders.extend(r)
+            all_orders.sort(key=lambda x: int(x.get('time', x.get('updateTime', 0))), reverse=True)
+            return all_orders[:limit]
+    except Exception as e:
+        print(f"⚠️ Erro ao buscar histórico de ordens da Binance: {e}")
+        return []
+
+
