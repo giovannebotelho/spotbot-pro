@@ -349,6 +349,35 @@ class DatabaseManager:
                 futures_win_rate = (futures_wins / futures_trades * 100) if futures_trades > 0 else 0
                 total_net_profit = spot_net_profit + futures_net_profit
                 
+                # Cálculo de Métricas Quantitativas de Hedge Fund (Sharpe Ratio, Profit Factor, Max Drawdown)
+                cursor.execute("SELECT trade_result_net FROM trades WHERE trade_result_net IS NOT NULL ORDER BY id ASC")
+                pnls_raw = cursor.fetchall()
+                pnls = [float(r["trade_result_net"] if self.is_postgres else r[0]) for r in pnls_raw] if pnls_raw else []
+
+                profit_factor = 1.0
+                sharpe_ratio = 0.0
+                max_drawdown_pct = 0.0
+
+                if pnls:
+                    gross_profit = sum(p for p in pnls if p > 0)
+                    gross_loss = abs(sum(p for p in pnls if p < 0))
+                    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 1.0)
+
+                    # Sharpe Ratio (assumindo risk-free rate de 0)
+                    import numpy as np
+                    pnl_arr = np.array(pnls)
+                    mean_pnl = np.mean(pnl_arr)
+                    std_pnl = np.std(pnl_arr)
+                    if std_pnl > 0:
+                        sharpe_ratio = float((mean_pnl / std_pnl) * np.sqrt(min(len(pnls), 365)))
+                    
+                    # Max Drawdown
+                    cum_pnls = np.cumsum(pnl_arr)
+                    peak = np.maximum.accumulate(cum_pnls)
+                    drawdown = peak - cum_pnls
+                    max_drawdown = float(np.max(drawdown)) if len(drawdown) > 0 else 0.0
+                    max_drawdown_pct = (max_drawdown / max(100.0, np.max(peak) if len(peak) > 0 and np.max(peak) > 0 else 1000.0)) * 100
+
                 _stats_cache = {
                     "total_trades": spot_trades + futures_trades,
                     "spot_trades": spot_trades,
@@ -361,7 +390,10 @@ class DatabaseManager:
                     "futures_win_rate": futures_win_rate,
                     "total_net_profit": total_net_profit,
                     "spot_net_profit": spot_net_profit,
-                    "futures_net_profit": futures_net_profit
+                    "futures_net_profit": futures_net_profit,
+                    "profit_factor": profit_factor,
+                    "sharpe_ratio": sharpe_ratio,
+                    "max_drawdown_pct": max_drawdown_pct
                 }
                 _last_stats_time = now
                 return _stats_cache

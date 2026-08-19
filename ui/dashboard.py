@@ -66,6 +66,9 @@ fear_greed_val = None
 market_cap_val = None
 liquidations_val = None
 cmc20_val = None
+sharpe_val = None
+profit_factor_val = None
+max_dd_val = None
 
 risk_profile_select = None
 paper_trading_switch = None
@@ -301,6 +304,14 @@ async def update_data():
             futures_profit_val.classes(remove='text-emerald-400 text-rose-400', add='text-[#10B981]' if stats['futures_net_profit'] >= 0 else 'text-[#F43F5E]')
         if futures_win_rate_val:
             futures_win_rate_val.text = f"{stats.get('futures_win_rate', 0.0):.1f}%"
+
+        # Métricas de Hedge Fund (Sharpe, Profit Factor, Drawdown)
+        if sharpe_val:
+            sharpe_val.text = f"{stats.get('sharpe_ratio', 0.0):.2f}"
+        if profit_factor_val:
+            profit_factor_val.text = f"{stats.get('profit_factor', 1.0):.2f}x"
+        if max_dd_val:
+            max_dd_val.text = f"-{stats.get('max_drawdown_pct', 0.0):.1f}%"
         
         if futures_usdt_val:
             try:
@@ -744,6 +755,35 @@ async def index():
             .glow-text-sky { text-shadow: 0 0 10px rgba(14, 165, 233, 0.5); }
             .glow-text-rose { text-shadow: 0 0 10px rgba(244, 63, 94, 0.5); }
         </style>
+        <script>
+            // Audio FX Synthesizer para Alertas de Trading
+            window.playTradeSound = function(type) {
+                try {
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    if (type === 'tp') {
+                        // Som de Take Profit (2 bips agudos harmônicos)
+                        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+                        osc.frequency.setValueAtTime(880.00, ctx.currentTime + 0.1); // A5
+                        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.35);
+                    } else if (type === 'entry') {
+                        // Som de Entrada (Subtle Bloomberg Ping)
+                        osc.frequency.setValueAtTime(440.00, ctx.currentTime); // A4
+                        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 0.2);
+                    }
+                } catch(e) {}
+            };
+        </script>
     ''')
 
     # Container Principal Responsivo
@@ -821,9 +861,17 @@ async def index():
                     ui.label('Taxa de Vitória').classes('text-xs text-slate-400')
                     futures_win_rate_val = ui.label('0.0%').classes('font-mono text-sm font-bold text-emerald-400')
 
-            with ui.column().classes('w-full gap-1 mt-2'):
-                ui.label('STATUS ATUAL').classes('text-[0.6rem] font-bold text-slate-500 tracking-widest')
-                status_ui = ui.markdown('**Aguardando...**').classes('text-xs text-slate-300 leading-relaxed w-full break-words')
+            with ui.column().classes('w-full gap-2 mt-2'):
+                ui.label('MÉTRICAS QUANT (Hedge Fund)').classes('text-[0.6rem] font-bold text-slate-500 tracking-widest')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-indigo-500/30 shadow-[inset_0_0_15px_rgba(99,102,241,0.05)]'):
+                    ui.label('Índice Sharpe').classes('text-xs text-slate-400')
+                    sharpe_val = ui.label('0.00').classes('font-mono text-sm font-bold text-indigo-400')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-indigo-500/30 shadow-[inset_0_0_15px_rgba(99,102,241,0.05)]'):
+                    ui.label('Fator de Lucro').classes('text-xs text-slate-400')
+                    profit_factor_val = ui.label('1.00x').classes('font-mono text-sm font-bold text-emerald-400')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-indigo-500/30 shadow-[inset_0_0_15px_rgba(99,102,241,0.05)]'):
+                    ui.label('Max Drawdown').classes('text-xs text-slate-400')
+                    max_dd_val = ui.label('-0.0%').classes('font-mono text-sm font-bold text-rose-400')
 
         # Área Principal (Direita com Scroll Vertical Habilitado)
         with ui.column().classes('w-full lg:flex-1 h-auto lg:h-full overflow-y-auto p-0 bg-transparent flex-col gap-0 min-w-0 z-10 relative'):
