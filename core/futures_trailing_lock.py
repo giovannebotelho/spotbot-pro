@@ -64,9 +64,67 @@ async def run_trailing_lock_monitor(client, log=print):
                     cur_roi = ((entry_price - cur_price) / entry_price) * leverage * 100
                     peak_roi = ((entry_price - pos['peak_price']) / entry_price) * leverage * 100
                 
-                # Regra 1: Take Profit Absoluto (5.5% ROI)
-                if cur_roi >= 5.5:
-                    log(f"🎯 [TAKE-PROFIT MAX] {symbol} atingiu o alvo de 5.5% de ROI! Fechando a mercado.")
+                atr_pct = pos.get('atr_pct', 0.015)
+                partial_taken = pos.get('partial_taken', False)
+
+                # Cálculo de Metas Adaptativas por Volatilidade (ATR Dinâmico)
+                # Volatilidade alta -> alvos maiores; Volatilidade baixa -> alvos curtos
+                adaptive_tp_roi = max(4.5, min(12.0, atr_pct * leverage * 100 * 0.9))
+                adaptive_preventive_sl = -max(7.5, min(14.0, atr_pct * leverage * 100 * 1.1))
+
+                # Regra 0: Parcial Dinâmica (50% do lote em +3.5% ROI) + Breakeven Automático
+                if cur_roi >= 3.5 and not partial_taken and qty > 0:
+                    try:
+                        half_qty = qty / 2.0
+                        # Descobre a precisão do ativo para quantizar a meia posição
+                        from decimal import Decimal, ROUND_DOWN
+                        # Usa precisão conservadora para a metade
+                        half_qty_rounded = float(Decimal(str(half_qty)).quantize(Decimal('0.001'), rounding=ROUND_DOWN))
+                        
+                        if half_qty_rounded > 0:
+                            side_exit = 'SELL' if direction == 'LONG' else 'BUY'
+                            log(f"🎯 [PARCIAL 50%] {symbol} atingiu +{cur_roi:.2f}% de ROI! Realizando 50% ({half_qty_rounded}) a mercado...")
+                            
+                            # Envia ordem parcial a mercado
+                            await client.futures_create_order(
+                                symbol=symbol, side=side_exit, type='MARKET',
+                                quantity=half_qty_rounded, reduceOnly='true'
+                            )
+                            
+                            # Cancela SL antigo e recria SL no Breakeven (Preço de Entrada) para o restante
+                            await robust_cancel_all_orders(client, symbol, log)
+                            remaining_qty = qty - half_qty_rounded
+                            
+                            await client.futures_create_order(
+                                symbol=symbol, side=side_exit, type='STOP_MARKET',
+                                stopPrice=entry_price, closePosition='true'
+                            )
+                            
+                            # Atualiza estado na memória
+                            await futures_state.update(symbol, 'qty', remaining_qty)
+                            await futures_state.update(symbol, 'partial_taken', True)
+                            await futures_state.update(symbol, 'sl', entry_price)
+                            
+                            log(f"🛡️ [BREAKEVEN] Stop Loss de {symbol} movido para o preço de entrada (${entry_price:.4f}). Risco ZERO ativado!")
+                            
+                            from config.settings import TELEGRAM_CONFIG
+                            from services.telegram_notifier import send_telegram_message
+                            if TELEGRAM_CONFIG.get('bot_token') and TELEGRAM_CONFIG.get('chat_id'):
+                                asyncio.create_task(send_telegram_message(
+                                    TELEGRAM_CONFIG['bot_token'], TELEGRAM_CONFIG['chat_id'],
+                                    f"🎯 <b>PARCIAL 50% EXECUTADA NO LUCRO!</b>\n\n"
+                                    f"🪙 <b>Par:</b> {symbol} ({direction})\n"
+                                    f"📈 <b>ROI Atual:</b> +{cur_roi:.2f}%\n"
+                                    f"💰 <b>Qtd Fechada:</b> {half_qty_rounded}\n"
+                                    f"🛡️ <b>Stop Breakeven:</b> Movido para ${entry_price:.4f} (Risco Zero!)"
+                                ))
+                            continue
+                    except Exception as p_err:
+                        log(f"⚠️ Aviso na execução parcial de {symbol}: {p_err}")
+
+                # Regra 1: Take Profit Absoluto / Adaptativo por ATR
+                if cur_roi >= adaptive_tp_roi:
+                    log(f"🎯 [TAKE-PROFIT MAX] {symbol} atingiu o alvo adaptativo de {cur_roi:.2f}% de ROI (Meta: {adaptive_tp_roi:.1f}%)! Fechando a mercado.")
                     await execute_trailing_close(client, symbol, direction, qty, log)
                     continue
                     
@@ -79,10 +137,9 @@ async def run_trailing_lock_monitor(client, log=print):
                             await execute_trailing_close(client, symbol, direction, qty, log)
                             continue
                             
-                # Regra 3: Tolerância Máxima Negativa
-                # Para evitar violinar em pequenos recuos negativos (-1%, -2%), deixamos respirar até -9% de ROI
-                if cur_roi <= -9.0:
-                    log(f"⚡ [STOP PREVENTIVO] Trade atingiu tolerância máxima negativa (Atual: {cur_roi:.2f}%). Fechando antes do SL rígido!")
+                # Regra 3: Tolerância Máxima Negativa (Stop Preventivo Adaptativo)
+                if cur_roi <= adaptive_preventive_sl:
+                    log(f"⚡ [STOP PREVENTIVO] Trade atingiu tolerância máxima negativa (Atual: {cur_roi:.2f}%, Limite: {adaptive_preventive_sl:.1f}%). Fechando antes do SL rígido!")
                     await execute_trailing_close(client, symbol, direction, qty, log)
                     continue
                             

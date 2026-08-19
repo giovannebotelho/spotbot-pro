@@ -50,6 +50,12 @@ def calculate_bollinger_bands(closes, period=20, std_dev=2):
     lower = ma - (std * std_dev)
     return float(lower.iloc[-1]), float(ma.iloc[-1]), float(upper.iloc[-1])
 
+def calculate_bollinger_bandwidth(bb_upper, bb_lower, sma20):
+    """Calcula a largura relativa das Bandas de Bollinger (BandWidth %)."""
+    if not sma20 or sma20 == 0 or not bb_upper or not bb_lower:
+        return 5.0
+    return ((bb_upper - bb_lower) / sma20) * 100
+
 def calculate_vwap(closes, volumes):
     if not closes or not volumes or len(closes) != len(volumes):
         return closes[-1] if closes else 0.0

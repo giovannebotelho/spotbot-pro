@@ -191,17 +191,21 @@ def build_pdf(output_filename="docs/SpotBot_Pro_Dossie_Tecnico_v7.pdf"):
     story.append(Spacer(1, 8))
 
     # Seção 5
-    story.append(Paragraph("5. 🛡️ Motor de Defesa em Tempo Real (Trailing Lock & Stop Preventivo)", h1_style))
+    story.append(Paragraph("5. 🛡️ Motor de Defesa em Tempo Real (Trailing Lock, Parcial 50% & Breakeven)", h1_style))
     story.append(Paragraph("O monitor de liquidação roda a cada 1 segundo sobre o Retorno sobre Capital Próprio (ROI):", body_style))
-    story.append(Paragraph("1. <b>Take-Profit Máximo (+5.50% ROI):</b> Encerramento a mercado imediato para assegurar o ganho de scalping.", bullet_style))
+    story.append(Paragraph("0. <b>Parcial Dinâmica (50% do lote em +3.50% ROI):</b> Realiza 50% da posição a mercado no primeiro alvo e move o Stop Loss do restante para o preço de entrada (Breakeven - Risco Zero).", bullet_style))
+    story.append(Paragraph("1. <b>Take-Profit Máximo Adaptativo por ATR:</b> Encerramento da posição restante na máxima expansão de volatilidade (4.5% a 12.0% ROI).", bullet_style))
     story.append(Paragraph("2. <b>Trailing Lock Dinâmico:</b> Ao atingir pico de ROI >= +3.00%, um recuo de 3.00% aciona saída a mercado no positivo.", bullet_style))
-    story.append(Paragraph("3. <b>Stop Preventivo Antecipado (-9.00% ROI):</b> Encerramento de segurança antes do SL rígido, mitigando o drawdown.", bullet_style))
+    story.append(Paragraph("3. <b>Stop Preventivo Adaptativo por ATR:</b> Encerramento antecipado a mercado (-7.5% a -14.0% ROI) antes do SL rígido, mitigando o drawdown.", bullet_style))
+    story.append(Paragraph("4. <b>Circuit Breaker Diário (-5.0% Max Drawdown):</b> Se o saldo total diário recuar 5.0%, pausa novas entradas por 6 horas e alerta no Telegram.", bullet_style))
     story.append(Spacer(1, 8))
 
     # Seção 6
     story.append(Paragraph("6. 🧠 Escudos e Filtros Anti-Violinada Ativos", h1_style))
     story.append(Paragraph("• <b>Regime Shield:</b> Alinhamento obrigatório com a tendência macro do BTC no gráfico de 1H.", bullet_style))
     story.append(Paragraph("• <b>Multi-Timeframe (MTF):</b> Operações de continuidade exigem validação da EMA20 no gráfico de 1H.", bullet_style))
+    story.append(Paragraph("• <b>Squeeze Detector (Bollinger BandWidth):</b> Bloqueia entradas em mercado lateral comprimido (< 0.8% largura) sem volume de rompimento.", bullet_style))
+    story.append(Paragraph("• <b>Orderbook Imbalance (Futuros Depth 20):</b> Bloqueia compras se houver pressão vendedora no book e vice-versa.", bullet_style))
     story.append(Paragraph("• <b>Tape Reading / CVD:</b> Filtro de fluxo que aborta entradas contra a agressão compradora/vendedora do livro.", bullet_style))
     story.append(Paragraph("• <b>Candle Shield & Anti-Faca:</b> Bloqueia entradas em velas de rejeição contrárias e quedas livres superiores a 0.40%.", bullet_style))
     story.append(Paragraph("• <b>Sniper Mode (3 min):</b> Observa a exaustão da agressão no micro-momento para obter o melhor preço de execução.", bullet_style))

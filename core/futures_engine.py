@@ -6,7 +6,10 @@ from services.binance_client import (
     get_futures_usdt_balance, get_futures_usdt_total_balance, get_futures_klines, get_futures_whale_ratio
 )
 from core.decision import get_precision
-from core.indicators import calculate_rsi, check_candle_patterns, calculate_macd, calculate_atr
+from core.indicators import (
+    calculate_rsi, check_candle_patterns, calculate_macd, calculate_atr,
+    calculate_bollinger_bandwidth, calculate_orderbook_imbalance
+)
 from core.futures_order_manager import monitor_futures_lifecycle
 from services.telegram_notifier import send_telegram_message
 from config.settings import TOP_10_FUTURES_SYMBOLS
@@ -52,6 +55,10 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
     from services.binance_futures_stream import run_futures_user_stream
     from core.futures_trailing_lock import run_trailing_lock_monitor
     
+    daily_starting_balance = 0.0
+    daily_balance_day = None
+    circuit_breaker_active_until = 0
+
     futures_bg_tasks = []
     try:
         futures_bg_tasks.append(asyncio.create_task(run_futures_user_stream(client, db, log)))
@@ -182,11 +189,43 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                 except Exception as e:
                     log(f"⚠️ Erro ao analisar BTCUSDT para filtro de mercado: {e}")
                 # ---------------------------------------------
+                # 0. Circuit Breaker Diário (-5.0% Max Daily Drawdown)
+                import datetime as dt_module
+                now_brt = dt_module.datetime.now(TIMEZONE)
+                current_day = now_brt.strftime("%Y-%m-%d")
+
+                if daily_balance_day != current_day:
+                    daily_starting_balance = await get_futures_usdt_total_balance(client)
+                    daily_balance_day = current_day
+                    circuit_breaker_active_until = 0
+                    log(f"📅 [CIRCUIT-BREAKER] Saldo Base do Dia ({current_day}) fixado em: ${daily_starting_balance:.2f} USDT")
+
+                if time.time() < circuit_breaker_active_until:
+                    remaining_pause = int((circuit_breaker_active_until - time.time()) / 60)
+                    status(f"🛑 [CIRCUIT-BREAKER] Pausa de segurança ativa por mais {remaining_pause} min devido a Drawdown Diário.")
+                    await asyncio.sleep(60)
+                    continue
+
+                cur_total_bal = await get_futures_usdt_total_balance(client)
+                if daily_starting_balance > 0:
+                    daily_dd_pct = ((cur_total_bal - daily_starting_balance) / daily_starting_balance) * 100
+                    if daily_dd_pct <= -5.0:
+                        circuit_breaker_active_until = time.time() + (6 * 3600)  # Pausa de 6 horas
+                        log(f"🚨 [CIRCUIT-BREAKER ATIVADO] Prejuízo diário de {daily_dd_pct:.2f}% atingiu limite de -5.0%! Pausando novas entradas por 6 horas.")
+                        if TELEGRAM_CONFIG.get('bot_token') and TELEGRAM_CONFIG.get('chat_id'):
+                            asyncio.create_task(send_telegram_message(
+                                TELEGRAM_CONFIG['bot_token'], TELEGRAM_CONFIG['chat_id'],
+                                f"🚨 <b>CIRCUIT BREAKER DIÁRIO ATIVADO!</b>\n\n"
+                                f"📉 <b>Drawdown Diário:</b> {daily_dd_pct:.2f}%\n"
+                                f"💰 <b>Saldo Inicial:</b> ${daily_starting_balance:.2f}\n"
+                                f"💰 <b>Saldo Atual:</b> ${cur_total_bal:.2f}\n\n"
+                                f"🛡️ <i>Novas operações suspensas por 6 horas para preservar o patrimônio.</i>"
+                            ))
+                        await asyncio.sleep(60)
+                        continue
 
                 for symbol in symbols_to_scan:
-                    active_positions = await futures_state.get_all()
-                    if symbol in active_positions or symbol in binance_open_positions:
-                        continue
+                    if not bot_futures_running: break
                     
                     active_positions = await futures_state.get_all()
                     if len(active_positions) >= 3:
@@ -271,6 +310,12 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         if bb_lower and len(bb_lower) > 0 and bb_lower[-1] and bb_upper and len(bb_upper) > 0 and bb_upper[-1]:
                             dist_lower_bb = ((cur_price - bb_lower[-1]) / bb_lower[-1]) * 100
                             dist_upper_bb = ((cur_price - bb_upper[-1]) / bb_upper[-1]) * 100
+                            
+                            # Filtro Squeeze: Verifica se o mercado está comprimido demais (< 0.8% Bandwidth) sem volume
+                            bb_width = calculate_bollinger_bandwidth(bb_upper[-1], bb_lower[-1], sma20.iloc[-1] if hasattr(sma20, 'iloc') else cur_price)
+                            if bb_width < 0.8 and not has_volume_spike:
+                                log_throttled(f"💤 [SQUEEZE] {symbol} em compressão extrema ({bb_width:.2f}% width) sem volume. Aguardando rompimento.", f"sqz_{symbol}", log, 3600)
+                                continue
                         
                             if dist_lower_bb < -1.5 and has_volume_spike and rsi < 25:
                                 direction = 'LONG'
@@ -461,6 +506,23 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             elif sm_dir == direction:
                                 log(f"🐋 [SMART MONEY] Confluência ATIVA! Baleias e sistema apontando para {direction}. (Top: {top_ratio:.2f})")
 
+                        # 3. Orderbook Imbalance & Wall Detection em Futuros
+                        if direction:
+                            try:
+                                ob_fut = await client.futures_order_book(symbol=symbol, limit=20)
+                                ob_ratio, total_bid_vol, total_ask_vol, has_buy_wall, ob_msg = calculate_orderbook_imbalance(ob_fut)
+                                
+                                if direction == 'LONG' and ob_ratio < 0.6:
+                                    log(f"🛡️ [ORDERBOOK] Bloqueando LONG em {symbol}. Pressão vendedora massiva no Book (Bids/Asks: {ob_ratio:.2f}x).")
+                                    direction = None
+                                elif direction == 'SHORT' and ob_ratio > 1.8:
+                                    log(f"🛡️ [ORDERBOOK] Bloqueando SHORT em {symbol}. Muro de compra pesado no Book (Bids/Asks: {ob_ratio:.2f}x).")
+                                    direction = None
+                                else:
+                                    log(f"🌊 [ORDERBOOK] Fluxo confirmado para {direction} em {symbol} (Razão Bids/Asks: {ob_ratio:.2f}x)")
+                            except Exception as ob_err:
+                                log(f"⚠️ Aviso ao verificar Orderbook de Futuros em {symbol}: {ob_err}")
+
                     if direction:
                         log(f"🚨 [FUTUROS] Oportunidade {direction} detectada em {symbol} (Gatilho: {trigger_reason})")
                         log(f"🎯 [SNIPER MODE] Iniciando observação tática por até 3 minutos para exaustão...")
@@ -537,6 +599,10 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         
 
                     
+                        atr_val, atr_pct = calculate_atr(klines, period=14)
+                        if atr_val == 0: atr_val = cur_price * 0.015
+                        if atr_pct == 0: atr_pct = 0.015
+
                         # 2. Definição do TP/SL (Dinâmico Hedge Fund)
                         if '[BAND-SNIPER 15M]' in trigger_reason:
                             tp_price = bot_futures_status_data.pop('sniper_tp')
@@ -548,9 +614,6 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             else:
                                 tp_price = max(tp_price, cur_price * 0.9960)
                         else:
-                            atr_val, atr_pct = calculate_atr(klines, period=14)
-                            if atr_val == 0: atr_val = cur_price * 0.015
-                        
                             if '[GEMINI-AI]' in trigger_reason:
                                 tp_dist = atr_val * 0.5
                                 sl_dist = atr_val * 0.3
@@ -649,7 +712,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                                 continue
                             
                             await futures_state.add(symbol, {
-                                'entry': entry_price_executed, 'tp': tp_price, 'sl': sl_price, 'direction': direction, 'qty': qty, 'leverage': leverage
+                                'entry': entry_price_executed, 'tp': tp_price, 'sl': sl_price, 'direction': direction,
+                                'qty': qty, 'leverage': leverage, 'atr_pct': atr_pct, 'partial_taken': False
                             })
                             bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
                         
