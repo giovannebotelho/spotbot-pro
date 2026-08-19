@@ -69,6 +69,9 @@ cmc20_val = None
 sharpe_val = None
 profit_factor_val = None
 max_dd_val = None
+daily_pnl_val = None
+daily_trades_val = None
+daily_win_rate_val = None
 
 risk_profile_select = None
 paper_trading_switch = None
@@ -312,6 +315,17 @@ async def update_data():
             profit_factor_val.text = f"{stats.get('profit_factor', 1.0):.2f}x"
         if max_dd_val:
             max_dd_val.text = f"-{stats.get('max_drawdown_pct', 0.0):.1f}%"
+
+        # Resumo Diário (Hoje)
+        daily_stats = await asyncio.to_thread(db.get_daily_stats)
+        if daily_pnl_val:
+            d_pnl = daily_stats.get('daily_pnl', 0.0)
+            daily_pnl_val.text = f"${d_pnl:+.2f}"
+            daily_pnl_val.classes(remove='text-emerald-400 text-rose-400', add='text-[#10B981]' if d_pnl >= 0 else 'text-[#F43F5E]')
+        if daily_trades_val:
+            daily_trades_val.text = f"{daily_stats.get('trades', 0)} ({daily_stats.get('wins', 0)}W/{daily_stats.get('losses', 0)}L)"
+        if daily_win_rate_val:
+            daily_win_rate_val.text = f"{daily_stats.get('win_rate', 0.0):.1f}%"
         
         if futures_usdt_val:
             try:
@@ -872,6 +886,18 @@ async def index():
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-indigo-500/30 shadow-[inset_0_0_15px_rgba(99,102,241,0.05)]'):
                     ui.label('Max Drawdown').classes('text-xs text-slate-400')
                     max_dd_val = ui.label('-0.0%').classes('font-mono text-sm font-bold text-rose-400')
+
+            with ui.column().classes('w-full gap-2 mt-2'):
+                ui.label('RESUMO DO DIA (HOJE)').classes('text-[0.6rem] font-bold text-amber-500/80 tracking-widest')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-amber-500/30 shadow-[inset_0_0_15px_rgba(245,158,11,0.05)]'):
+                    ui.label('PnL Hoje').classes('text-xs text-slate-400')
+                    daily_pnl_val = ui.label('+$0.00').classes('font-mono text-sm font-bold text-emerald-400')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-amber-500/30 shadow-[inset_0_0_15px_rgba(245,158,11,0.05)]'):
+                    ui.label('Trades do Dia').classes('text-xs text-slate-400')
+                    daily_trades_val = ui.label('0 (0W/0L)').classes('font-mono text-xs font-bold text-slate-300')
+                with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-amber-500/30 shadow-[inset_0_0_15px_rgba(245,158,11,0.05)]'):
+                    ui.label('WinRate Hoje').classes('text-xs text-slate-400')
+                    daily_win_rate_val = ui.label('0.0%').classes('font-mono text-xs font-bold text-amber-400')
 
         # Área Principal (Direita com Scroll Vertical Habilitado)
         with ui.column().classes('w-full lg:flex-1 h-auto lg:h-full overflow-y-auto p-0 bg-transparent flex-col gap-0 min-w-0 z-10 relative'):
