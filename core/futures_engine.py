@@ -1,6 +1,6 @@
 import asyncio
 import time
-from config.settings import TELEGRAM_CONFIG, TIMEZONE
+from config.settings import TELEGRAM_CONFIG, TIMEZONE, TOP_10_FUTURES_SYMBOLS, TRADING_CONFIG
 from core.futures_state import futures_state
 from services.binance_client import (
     setup_futures_margin, place_futures_order, place_futures_conditional_order,
@@ -13,7 +13,6 @@ from core.indicators import (
 )
 from core.futures_order_manager import monitor_futures_lifecycle
 from services.telegram_notifier import send_telegram_message
-from config.settings import TOP_10_FUTURES_SYMBOLS
 
 bot_futures_running = False
 bot_futures_status_data = {
@@ -104,7 +103,6 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         try:
                             import pandas as pd
                             import datetime as dt_module
-                            from config.settings import TIMEZONE, TRADING_CONFIG
                             klines_raw = await get_futures_klines(client, symbol=rec_symbol, interval=TRADING_CONFIG['interval'], limit=100)
                             if klines_raw:
                                 klines_rec = [float(k[4]) for k in klines_raw]
