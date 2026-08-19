@@ -329,10 +329,10 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         if not tech_dir:
                             if rsi < 35 and cvd_direction == 'LONG':
                                 tech_dir = 'LONG'
-                                log(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD comprador massivo. Validando LONG antecipado em {symbol}.")
+                                log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD comprador massivo. Validando LONG antecipado em {symbol}.", f"smart_relax_{symbol}", log, 7200)
                             elif rsi > 65 and cvd_direction == 'SHORT':
                                 tech_dir = 'SHORT'
-                                log(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.")
+                                log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.", f"smart_relax_{symbol}", log, 7200)
                             
                         if tech_dir:
                             # Aborta se CVD apontar forte para a direção oposta
