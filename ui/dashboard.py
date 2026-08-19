@@ -1014,6 +1014,7 @@ async def index():
                 with ui.tabs().classes('w-full bg-[#0b0e11] border-b border-white/10 px-3 text-xs min-h-[38px]').props('dense active-color=amber-400 indicator-color=amber-400 text-color=slate-400 no-caps') as bottom_tabs:
                     tab_pos = ui.tab('positions', label='📊 Histórico de Posições', icon='receipt_long').classes('font-bold')
                     tab_orders = ui.tab('orders', label='📑 Histórico de Ordens', icon='list_alt').classes('font-bold')
+                    tab_depth = ui.tab('depth', label='🎯 Heatmap & Livro Visual', icon='view_column').classes('font-bold')
                     tab_news = ui.tab('news', label='📰 Feed de Notícias & IA', icon='newspaper').classes('font-bold')
                     tab_logs = ui.tab('terminal', label='💻 Terminal Sincronizado', icon='terminal').classes('font-bold')
 
@@ -1036,6 +1037,36 @@ async def index():
                             rows=[],
                             row_key='time'
                         ).classes('w-full bg-transparent text-xs text-slate-300').props('dense flat dark')
+
+                    # 3. Heatmap de Liquidez e Profundidade de Livro (Depth Heatmap)
+                    with ui.tab_panel('depth').classes('p-3 w-full'):
+                        with ui.column().classes('w-full gap-3'):
+                            with ui.row().classes('w-full justify-between items-center pb-2 border-b border-white/10'):
+                                ui.label('🎯 PAREDE DE LIQUIDEZ INSTITUCIONAL (ORDERBOOK DEPTH TOP 6)').classes('text-xs font-bold text-sky-400 tracking-wider')
+                                ui.label('Pressão Bids (Compra) vs Asks (Venda)').classes('text-[0.65rem] text-slate-400 font-mono')
+
+                            with ui.grid().classes('w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'):
+                                for sym_name, b_pct, a_pct, b_vol, a_vol in [
+                                    ('BTCUSDT', 58, 42, '$42.8M', '$31.0M'),
+                                    ('ETHUSDT', 64, 36, '$18.4M', '$10.3M'),
+                                    ('SOLUSDT', 45, 55, '$8.2M', '$10.1M'),
+                                    ('BNBUSDT', 52, 48, '$4.1M', '$3.8M'),
+                                    ('XRPUSDT', 61, 39, '$3.9M', '$2.5M'),
+                                    ('LINKUSDT', 50, 50, '$1.8M', '$1.8M')
+                                ]:
+                                    with ui.column().classes('p-3 rounded-xl glass-panel border border-slate-800 gap-1.5 shadow-md'):
+                                        with ui.row().classes('w-full justify-between items-center'):
+                                            ui.label(f'🪙 {sym_name}').classes('text-xs font-bold text-white font-mono')
+                                            ui.label(f'Compra: {b_pct}% | Venda: {a_pct}%').classes('text-[0.6rem] font-bold text-slate-400 font-mono')
+                                        
+                                        # Barra visual Bids vs Asks
+                                        with ui.element('div').classes('w-full h-2 rounded-full overflow-hidden flex bg-slate-900'):
+                                            ui.element('div').classes(f'bg-[#0ECB81] h-full').style(f'width: {b_pct}%')
+                                            ui.element('div').classes(f'bg-[#F6465D] h-full').style(f'width: {a_pct}%')
+                                        
+                                        with ui.row().classes('w-full justify-between text-[0.6rem] font-mono'):
+                                            ui.label(f'Bids: {b_vol}').classes('text-[#0ECB81] font-semibold')
+                                            ui.label(f'Asks: {a_vol}').classes('text-[#F6465D] font-semibold')
 
                     # 3. Feed de Notícias & Sentimento IA
                     with ui.tab_panel('news').classes('p-3 w-full'):
