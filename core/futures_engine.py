@@ -713,7 +713,8 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             
                             await futures_state.add(symbol, {
                                 'entry': entry_price_executed, 'tp': tp_price, 'sl': sl_price, 'direction': direction,
-                                'qty': qty, 'leverage': leverage, 'atr_pct': atr_pct, 'partial_taken': False
+                                'qty': qty, 'leverage': leverage, 'atr_pct': atr_pct, 'partial_taken': False,
+                                'step_size': step_size_str
                             })
                             bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
                         

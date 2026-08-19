@@ -76,10 +76,12 @@ async def run_trailing_lock_monitor(client, log=print):
                 if cur_roi >= 3.5 and not partial_taken and qty > 0:
                     try:
                         half_qty = qty / 2.0
-                        # Descobre a precisão do ativo para quantizar a meia posição
+                        step_size_str = pos.get('step_size', '0.001')
                         from decimal import Decimal, ROUND_DOWN
-                        # Usa precisão conservadora para a metade
-                        half_qty_rounded = float(Decimal(str(half_qty)).quantize(Decimal('0.001'), rounding=ROUND_DOWN))
+                        step_dec = Decimal(step_size_str)
+                        half_qty_dec = Decimal(str(half_qty))
+                        quantized_half = (half_qty_dec / step_dec).quantize(Decimal('1'), rounding=ROUND_DOWN) * step_dec
+                        half_qty_rounded = float(quantized_half)
                         
                         if half_qty_rounded > 0:
                             side_exit = 'SELL' if direction == 'LONG' else 'BUY'
