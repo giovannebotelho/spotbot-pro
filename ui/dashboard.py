@@ -247,6 +247,27 @@ async def change_chart_asset(val):
         print(f"Aviso ao alterar gráfico para {base_val}: {e}")
 
 @ui.refreshable
+def render_chart_tabs():
+    global chart_tabs, selected_chart_symbol, _last_rendered_tabs
+    
+    chart_tabs = ui.tabs(on_change=lambda e: asyncio.create_task(change_chart_asset(e.value))).props('dense active-color=sky-400 indicator-color=sky-400 text-color=slate-400 no-caps').classes('bg-transparent min-h-[40px] text-xs')
+    with chart_tabs:
+        ui.tab('foco', label='⚡ Foco do Bot (Scanner)', icon='center_focus_strong')
+        for sym in sorted(_last_rendered_tabs):
+            base_sym = sym.replace('_spot', '').replace('_fut', '')
+            is_spot = sym.endswith('_spot')
+            is_fut = sym.endswith('_fut')
+            label_suffix = '(OCO)' if is_spot else '(FUT)'
+            icon = 'show_chart' if is_spot else 'rocket_launch'
+            
+            ui.tab(sym, label=f'🪙 {base_sym} {label_suffix}' if is_spot else f'🚀 {base_sym} {label_suffix}', icon=icon).classes('text-sky-400' if is_spot else 'text-rose-400')
+            
+    if selected_chart_symbol and selected_chart_symbol in _last_rendered_tabs:
+        chart_tabs.value = selected_chart_symbol
+    else:
+        chart_tabs.value = 'foco'
+
+@ui.refreshable
 def render_positions_panel():
     global _cached_pos_rows
     if not _cached_pos_rows:
