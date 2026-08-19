@@ -105,7 +105,7 @@ class TelegramBot:
             return {
                 "inline_keyboard": [
                     [
-                        {"text": "🏆 Top 40 Ranking", "callback_data": "/top40"},
+                        {"text": "🏆 Top 6 Ranking", "callback_data": "/top40"},
                         {"text": "🔄 Rescan de Mercado", "callback_data": "/status"},
                     ],
                     [
@@ -166,7 +166,7 @@ class TelegramBot:
                         {"text": "📈 Posições OCO", "callback_data": "sub_posicoes"},
                     ],
                     [
-                        {"text": "⚡ Top 40 Scanner", "callback_data": "sub_scanner"},
+                        {"text": "⚡ Top 6 Elite Scanner", "callback_data": "sub_scanner"},
                         {"text": "⚙️ Perfil de Risco", "callback_data": "sub_risco"},
                     ],
                     [
@@ -242,7 +242,7 @@ class TelegramBot:
                         "posicoes": "📈 <b>PAINEL SPOT (Posições OCO)</b>\nMonitore ordens ativas ou execute encerramentos:",
                         "futures": "🚀 <b>PAINEL DE MERCADO FUTUROS (HedgeFund)</b>\nControle posições alavancadas Long/Short de forma independente:",
                         "risco": "⚙️ <b>CONFIGURAÇÃO DE PERFIL DE RISCO</b>\nSelecione a estratégia de gestão de banca desejada:",
-                        "scanner": "⚡ <b>SCANNER DE FORÇA RELATIVA TOP 40</b>\nAcompanhe o ranking dos 40 maiores ativos do mercado:",
+                        "scanner": "⚡ <b>SCANNER DE FORÇA RELATIVA TOP 6 ELITE</b>\nAcompanhe o ranking dos principais ativos selecionados do mercado:",
                         "ia": "🤖 <b>PAINEL INTELIGÊNCIA IA GEMINI</b>\nAnálise de sentimento e relatórios preditivos:",
                         "config": "🛠️ <b>OPERAÇÕES & CONFIGURAÇÕES</b>\nComandos de sistema, relatórios PDF e controle de operação:"
                     }

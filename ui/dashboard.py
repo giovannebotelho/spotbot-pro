@@ -678,8 +678,8 @@ async def index():
             with ui.column().classes('w-full gap-1'):
                 ui.label('MODO DE MONITORAMENTO').classes('text-[0.6rem] font-bold text-slate-500 tracking-widest')
                 symbol_select = ui.select(
-                    options=['⚡ SCANNER TOP 40', 'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT', 'AVAXUSDT', 'LINKUSDT', 'NEARUSDT'],
-                    value='⚡ SCANNER TOP 40'
+                    options=['⚡ SCANNER ELITE', 'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'LINKUSDT'],
+                    value='⚡ SCANNER ELITE'
                 ).classes('w-full input-zinc glass-panel rounded-lg').props('dark outlined dense')
 
             with ui.column().classes('w-full gap-1'):
@@ -730,10 +730,10 @@ async def index():
                 ui.label('MERCADO FUTUROS (HedgeFund)').classes('text-[0.6rem] font-bold text-slate-500 tracking-widest')
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-emerald-500/30 shadow-[inset_0_0_15px_rgba(16,185,129,0.05)]'):
                     ui.label('Modo de Monitoramento').classes('text-xs text-slate-400')
-                    ui.label('⚡ SCANNER TOP 10').classes('font-mono text-[0.65rem] font-bold text-emerald-400')
+                    ui.label('⚡ SCANNER TOP 6 ELITE').classes('font-mono text-[0.65rem] font-bold text-emerald-400')
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-emerald-500/30 shadow-[inset_0_0_15px_rgba(16,185,129,0.05)]'):
                     ui.label('Alavancagem').classes('text-xs text-slate-400')
-                    ui.label('15x - Isolada').classes('font-mono text-[0.65rem] font-bold text-emerald-400')
+                    ui.label('Dinâmica (até 50x)').classes('font-mono text-[0.65rem] font-bold text-emerald-400')
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-emerald-500/30 shadow-[inset_0_0_15px_rgba(16,185,129,0.05)]'):
                     ui.label('Saldo Futuros').classes('text-xs text-slate-400')
                     futures_usdt_val = ui.label('$0.00').classes('font-mono text-sm font-bold text-emerald-400')

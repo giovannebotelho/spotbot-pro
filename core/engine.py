@@ -624,7 +624,7 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
                 "📈 /lucro ou /perf - Lucro líquido acumulado e Win Rate\n"
                 "⚡ /posicoes ou /ocos - Ordens OCO e posições ativas\n"
                 "📰 /noticias - Sentimento de mercado e notícias CryptoPanic\n"
-                "🔥 /top40 ou /scanner - Ranking de Força Relativa do Top 40\n"
+                "🔥 /top40 ou /scanner - Ranking de Força Relativa do Top 6 Elite\n"
                 "📄 /relatorio ou /pdf - Gera e envia Relatório Semanal PDF\n"
                 "🛑 /stop - Pausa o bot com segurança\n"
                 "📱 /menu ou /ajuda - Exibe o menu interativo com subcategorias"
@@ -654,9 +654,9 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
         log(f"💰 Saldo USDT disponível: \033[1;32m${saldo_inicial_usdt:.2f}\033[0m")
 
         is_scanner_mode = False
-        if selected_symbol == '⚡ SCANNER TOP 40' or not selected_symbol:
+        if selected_symbol in ['⚡ SCANNER TOP 40', '⚡ SCANNER ELITE'] or not selected_symbol:
             symbol = "BTCUSDT"
-            display_symbol = "⚡ SCANNER TOP 40"
+            display_symbol = "⚡ SCANNER ELITE"
             is_scanner_mode = True
         else:
             symbol = selected_symbol
@@ -803,7 +803,7 @@ async def run_bot(log_callback=None, investment_amount=None, selected_symbol=Non
 
                 active_target_symbol = symbol
                 if is_scanner_mode:
-                    status(f"⚡ Scanner 2.0 avaliando Top 40... (Vagas Livres: {MAX_CONCURRENT_POSITIONS - len(active_positions)}/{MAX_CONCURRENT_POSITIONS})")
+                    status(f"⚡ Scanner 2.0 avaliando Top Elite... (Vagas Livres: {MAX_CONCURRENT_POSITIONS - len(active_positions)}/{MAX_CONCURRENT_POSITIONS})")
                     multi_klines = await get_multi_klines(client, TOP_40_SYMBOLS, TRADING_CONFIG['interval'], TRADING_CONFIG['limit'])
                     ranked_assets = calculate_relative_strength_rank(multi_klines)
                     if ranked_assets:
