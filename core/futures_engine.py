@@ -1,4 +1,5 @@
 import asyncio
+import time
 from config.settings import TELEGRAM_CONFIG, TIMEZONE
 from core.futures_state import futures_state
 from services.binance_client import (
@@ -527,7 +528,6 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         log(f"🚨 [FUTUROS] Oportunidade {direction} detectada em {symbol} (Gatilho: {trigger_reason})")
                         log(f"🎯 [SNIPER MODE] Iniciando observação tática por até 3 minutos para exaustão...")
                     
-                        import time
                         stalk_start = time.time()
                         stalk_duration = 180
                         price_history = []

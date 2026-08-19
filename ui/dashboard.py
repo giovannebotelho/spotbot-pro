@@ -574,6 +574,31 @@ async def update_data():
 
             except Exception as hist_err:
                 pass
+        elif futures_positions_table and not futures_positions_table.rows:
+            # Fallback inicial usando o Banco de Dados para que as tabelas já venham preenchidas
+            try:
+                recent_df = await asyncio.to_thread(db.get_recent_trades, limit=15)
+                if not recent_df.empty:
+                    db_rows = []
+                    for _, row in recent_df.iterrows():
+                        pnl_val = float(row.get('Resultado Total Liquido', row.get('trade_result_net', 0.0)))
+                        sym = row.get('Símbolo', row.get('symbol', 'BTCUSDT'))
+                        m_type = row.get('market_type', 'FUTURES')
+                        pnl_s = f"+${pnl_val:.2f}" if pnl_val >= 0 else f"-${abs(pnl_val):.2f}"
+                        db_rows.append({
+                            'symbol': f"{sym} {'Perp' if m_type == 'FUTURES' else 'Spot'}",
+                            'leverage': '15x Isolada' if m_type == 'FUTURES' else '1x Spot',
+                            'status': 'Fechada',
+                            'pnl': pnl_s,
+                            'roi': f"{(pnl_val / 50.0) * 100:+.2f}%",
+                            'qty': '0.050',
+                            'entry': f"${float(row.get('Preço de Entrada', 0.0)):.4f}" if float(row.get('Preço de Entrada', 0.0)) > 0 else "N/A",
+                            'exit': f"${float(row.get('Preço de Saída', 0.0)):.4f}" if float(row.get('Preço de Saída', 0.0)) > 0 else "N/A",
+                            'time': str(row.get('Data/Hora da Compra', row.get('oco_timestamp', 'Hoje')))
+                        })
+                    futures_positions_table.rows = db_rows
+            except Exception:
+                pass
 
     except Exception:
         pass
@@ -758,8 +783,8 @@ async def index():
             }
             .animate-marquee {
                 display: flex;
-                width: 200%;
-                animation: marquee 35s linear infinite;
+                width: max-content;
+                animation: marquee 30s linear infinite;
             }
             .animate-marquee:hover {
                 animation-play-state: paused;
@@ -911,17 +936,24 @@ async def index():
                     if settings.PAPER_TRADING_MODE:
                         ui.label('🟡 PAPER TRADING (TESTNET)').classes('bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 rounded-full px-2 py-0.5 text-[0.6rem] font-bold ml-2 shadow-[0_0_10px_rgba(234,179,8,0.3)]')
                 
-                # Container do Marquee
+                # Letreiro / Ticker Estilo Binance (Print 5)
                 with ui.element('div').classes('hidden md:flex flex-1 mx-3 overflow-hidden relative h-full items-center min-w-0'):
-                    with ui.element('div').classes('animate-marquee items-center gap-8 text-[0.7rem] font-mono text-slate-300 whitespace-nowrap'):
-                        ui.label('🔥 MARKET TICKER').classes('font-bold text-sky-400')
-                        ui.label('BTC: $64,340.00 (+0.37%)').classes('text-emerald-400 font-semibold')
-                        ui.label('ETH: $1,873.20 (+0.81%)').classes('text-emerald-400 font-semibold')
-                        ui.label('BNB: $568.49 (+0.82%)').classes('text-emerald-400 font-semibold')
-                        ui.label('SOL: $74.38 (-1.44%)').classes('text-rose-400 font-semibold')
-                        ui.label('XRP: $1.09 (+0.87%)').classes('text-emerald-400 font-semibold')
-                        ui.label('Market Cap: $2.38T (+1.2%)').classes('text-slate-400')
-                        ui.label('24h Vol: $78.4B').classes('text-slate-400')
+                    with ui.element('div').classes('animate-marquee items-center gap-6 text-[0.72rem] font-mono whitespace-nowrap'):
+                        ui.label('⚡ TOP COINS').classes('font-bold text-sky-400 font-sans')
+                        ui.label('BTCUSDT +0.37% $64,340.0').classes('text-emerald-400 font-semibold')
+                        ui.label('ETHUSDT +0.81% $1,873.2').classes('text-emerald-400 font-semibold')
+                        ui.label('SOLUSDT -1.44% $74.38').classes('text-rose-400 font-semibold')
+                        ui.label('BNBUSDT +0.82% $568.49').classes('text-emerald-400 font-semibold')
+                        ui.label('XRPUSDT +0.87% $1.0910').classes('text-emerald-400 font-semibold')
+                        ui.label('LINKUSDT +2.15% $14.22').classes('text-emerald-400 font-semibold')
+                        # Duplicado para criar efeito de loop contínuo sem cortes
+                        ui.label('⚡ TOP COINS').classes('font-bold text-sky-400 font-sans')
+                        ui.label('BTCUSDT +0.37% $64,340.0').classes('text-emerald-400 font-semibold')
+                        ui.label('ETHUSDT +0.81% $1,873.2').classes('text-emerald-400 font-semibold')
+                        ui.label('SOLUSDT -1.44% $74.38').classes('text-rose-400 font-semibold')
+                        ui.label('BNBUSDT +0.82% $568.49').classes('text-emerald-400 font-semibold')
+                        ui.label('XRPUSDT +0.87% $1.0910').classes('text-emerald-400 font-semibold')
+                        ui.label('LINKUSDT +2.15% $14.22').classes('text-emerald-400 font-semibold')
 
                 # Botoes de Acao Touch-Friendly (START, STOP, CANCEL, LOGOUT)
                 with ui.row().classes('items-center gap-1.5 sm:gap-2 z-10 glass-panel ml-auto flex-shrink-0'):
