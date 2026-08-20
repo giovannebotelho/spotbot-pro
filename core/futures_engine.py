@@ -602,22 +602,17 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         if atr_pct == 0: atr_pct = 0.015
 
                         # 2. Definição do TP/SL (Dinâmico Hedge Fund)
+                        # 2. Definição do TP/SL (Otimizado por Backtest Quantitativo nos últimos 60 dias)
                         if '[BAND-SNIPER 15M]' in trigger_reason:
                             tp_price = bot_futures_status_data.pop('sniper_tp')
                             sl_price = bot_futures_status_data.pop('sniper_sl')
-                        
-                            # Trava de segurança: Garante que o TP não ultrapasse 8% de ROE (0.40% preço)
-                            if direction == 'LONG':
-                                tp_price = min(tp_price, cur_price * 1.0040)
-                            else:
-                                tp_price = max(tp_price, cur_price * 0.9960)
                         else:
                             if '[GEMINI-AI]' in trigger_reason:
-                                tp_dist = atr_val * 0.5
-                                sl_dist = atr_val * 0.3
+                                tp_dist = atr_val * 1.5
+                                sl_dist = atr_val * 1.0
                             else:
-                                tp_dist = atr_val * 3.0  # Alvo Otimizado 3.0x ATR
-                                sl_dist = atr_val * 2.5  # Stop Otimizado 2.5x ATR
+                                tp_dist = atr_val * 2.5  # Alvo Quant 2.5x ATR (Relação R:R Assimétrica Positiva)
+                                sl_dist = atr_val * 1.5  # Stop Institucional 1.5x ATR
                             
                             if direction == 'LONG':
                                 tp_price = cur_price + tp_dist
