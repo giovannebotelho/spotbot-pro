@@ -77,6 +77,10 @@ async def run_trailing_lock_monitor(client, log=print):
                     try:
                         half_qty = qty / 2.0
                         step_size_str = pos.get('step_size', '0.001')
+                        # Se step_size_str for padrão e for LINKUSDT, força '1' ou '0.1'
+                        if symbol == 'LINKUSDT' and step_size_str in ['0.001', '0.01']:
+                            step_size_str = '0.1'
+
                         from decimal import Decimal, ROUND_DOWN
                         step_dec = Decimal(step_size_str)
                         half_qty_dec = Decimal(str(half_qty))
@@ -94,20 +98,25 @@ async def run_trailing_lock_monitor(client, log=print):
                             side_exit = 'SELL' if direction == 'LONG' else 'BUY'
                             log(f"🎯 [PARCIAL 50%] {symbol} atingiu +{cur_roi:.2f}% de ROI! Realizando 50% ({half_qty_rounded}) a mercado...")
                             
+                            # Cancela ordens condicionais antigas antes para evitar conflito -4130
+                            await robust_cancel_all_orders(client, symbol, log)
+
                             # Envia ordem parcial a mercado
                             await client.futures_create_order(
                                 symbol=symbol, side=side_exit, type='MARKET',
                                 quantity=half_qty_rounded, reduceOnly='true'
                             )
                             
-                            # Cancela SL antigo e recria SL no Breakeven (Preço de Entrada) para o restante
-                            await robust_cancel_all_orders(client, symbol, log)
+                            # Recria SL no Breakeven (Preço de Entrada) para a posição remanescente
                             remaining_qty = qty - half_qty_rounded
                             
-                            await client.futures_create_order(
-                                symbol=symbol, side=side_exit, type='STOP_MARKET',
-                                stopPrice=entry_price, closePosition='true'
-                            )
+                            try:
+                                await client.futures_create_order(
+                                    symbol=symbol, side=side_exit, type='STOP_MARKET',
+                                    stopPrice=entry_price, closePosition='true'
+                                )
+                            except Exception as sl_err:
+                                log(f"⚠️ Aviso ao recriar SL Breakeven em {symbol}: {sl_err}")
                             
                             # Atualiza estado na memória
                             await futures_state.update(symbol, 'qty', remaining_qty)

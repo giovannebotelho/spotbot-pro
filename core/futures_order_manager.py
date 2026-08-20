@@ -121,6 +121,16 @@ async def robust_cancel_all_orders(client, symbol, log):
         await client.futures_cancel_all_open_orders(symbol=symbol)
     except Exception: pass
     
+    # Cancela ordens condicionais e algos (TP/SL)
+    try:
+        algo_orders = await client.futures_get_open_algo_orders(symbol=symbol)
+        if algo_orders:
+            for ao in algo_orders:
+                try:
+                    await client.futures_cancel_algo_order(algoId=ao.get('algoId'))
+                except Exception: pass
+    except Exception: pass
+
     try:
         open_orders = await client.futures_get_open_orders(symbol=symbol)
         for order in open_orders:
