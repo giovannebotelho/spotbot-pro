@@ -78,11 +78,14 @@ async def evaluate_band_sniper(client, symbol, log=print):
         prev_high = highs[-2]
         prev_low = lows[-2]
         
-        # Sinal SHORT: Tocou/Rompeu Banda Superior (ou perto %B >= 0.98) e RSI >= 58
+        # 1. Sinal SHORT: Rompimento Real do Teto (Exaustão Extrema) com RSI Sobrecomprado Real (>= 74)
         is_upper_pierced = cur_high >= cur_ub or prev_high >= cur_ub
         b_pct_upper = (cur_close - cur_lb) / (cur_ub - cur_lb) if (cur_ub - cur_lb) > 0 else 0
         
-        if (is_upper_pierced or b_pct_upper >= 0.98) and rsi >= 58:
+        # Só dá SHORT se houve rejeição de topo (fechamento abaixo da máxima ou vela vermelha) e RSI parabólico
+        is_exhaustion_short = cur_close < cur_high and (cur_close <= prev_close or cur_close < cur_ub)
+        
+        if (is_upper_pierced or b_pct_upper >= 1.02) and rsi >= 74 and is_exhaustion_short:
             direction = 'SHORT'
             tp_price = cur_sma
             # SL = 1.5 * ATR acima da máxima extrema (wick)
@@ -90,11 +93,14 @@ async def evaluate_band_sniper(client, symbol, log=print):
             sl_price = extreme_high + (1.5 * atr)
             return direction, tp_price, sl_price
             
-        # Sinal LONG: Tocou/Rompeu Banda Inferior (ou perto %B <= 0.02) e RSI <= 42
+        # 2. Sinal LONG: Rompimento Real do Fundo (Exaustão Extrema) com RSI Sobrevendido Real (<= 26)
         is_lower_pierced = cur_low <= cur_lb or prev_low <= cur_lb
         b_pct_lower = (cur_close - cur_lb) / (cur_ub - cur_lb) if (cur_ub - cur_lb) > 0 else 0
         
-        if (is_lower_pierced or b_pct_lower <= 0.02) and rsi <= 42:
+        # Só dá LONG se houve absorção de fundo (fechamento acima da mínima) e RSI em capitulação
+        is_exhaustion_long = cur_close > cur_low and (cur_close >= prev_close or cur_close > cur_lb)
+        
+        if (is_lower_pierced or b_pct_lower <= -0.02) and rsi <= 26 and is_exhaustion_long:
             direction = 'LONG'
             tp_price = cur_sma
             # SL = 1.5 * ATR abaixo da mínima extrema (wick)

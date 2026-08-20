@@ -470,7 +470,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     # ----------------------------------------
 
                     # --- ALINHAMENTO MULTI-TIMEFRAME & WHALE TRACKER (Lazy Load) ---
-                    if direction and '[BAND-SNIPER 15M]' not in trigger_reason:
+                    if direction:
                         # 1. MTF 1H EMA20
                         try:
                             klines_1h = await get_futures_klines(client, symbol, interval='1h', limit=50)
@@ -629,11 +629,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         # Calcula a distância percentual do Stop Loss
                         sl_pct_dist = abs(cur_price - sl_price) / cur_price
                         
-                        # Alavancagem Dinâmica: 1 / (Stop Pct * 2.0 buffer) travado em 50x max (Para cobrir exigência de margem em stops curtos)
+                        # Alavancagem Dinâmica Inteligente: Travado em 20x max para garantir margem de manobra e evitar liquidação por ruído
                         raw_leverage = 1.0 / (sl_pct_dist * 2.0) if sl_pct_dist > 0 else 1.0
-                        initial_leverage = max(1, min(50, int(raw_leverage)))
+                        initial_leverage = max(3, min(20, int(raw_leverage)))
                         
-                        log(f"⚙️ \033[1;36mDynamic Leverage\033[0m: Stop a {sl_pct_dist*100:.2f}% | Alavancagem: \033[1;33m{initial_leverage}x\033[0m")
+                        log(f"⚙️ \033[1;36mDynamic Leverage\033[0m: Stop a {sl_pct_dist*100:.2f}% | Alavancagem Institucional: \033[1;33m{initial_leverage}x\033[0m")
                         
                         # 3. Gerenciamento de Risco (Liquidation Buffer)
                         from core.futures_risk_manager import validate_trade_safety
