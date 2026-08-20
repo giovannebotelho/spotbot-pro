@@ -17,11 +17,12 @@ async def send_telegram_message(bot_token, chat_id, message, reply_markup=None):
         payload["reply_markup"] = reply_markup
 
     try:
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=8)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, json=payload) as response:
                 return await response.json()
     except Exception as e:
-        print(f"🚨 Erro ao enviar mensagem no Telegram: {e}")
+        # Log simplificado para não poluir o terminal em caso de instabilidade momentânea da rede
         return None
 
 async def send_telegram_document(bot_token, chat_id, file_path, caption=""):

@@ -94,8 +94,17 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     sl_price = float(sl_order['triggerPrice']) if sl_order else (entry_price * 0.98 if direction == 'LONG' else entry_price * 1.02)
                 
                     if tp_order and sl_order:
+                        # Busca step_size no symbols_info
+                        s_info = symbols_info.get(rec_symbol, {})
+                        rec_step_str = "0.001"
+                        if s_info:
+                            for f in s_info.get('filters', []):
+                                if f['filterType'] == 'LOT_SIZE':
+                                    rec_step_str = f['stepSize']
+
                         await futures_state.add(rec_symbol, {
-                            'entry': entry_price, 'tp': tp_price, 'sl': sl_price, 'direction': direction, 'qty': qty
+                            'entry': entry_price, 'tp': tp_price, 'sl': sl_price, 'direction': direction,
+                            'qty': qty, 'step_size': rec_step_str
                         })
                         bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
                         bot_futures_status_data['target_asset'] = rec_symbol

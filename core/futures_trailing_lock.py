@@ -83,6 +83,13 @@ async def run_trailing_lock_monitor(client, log=print):
                         quantized_half = (half_qty_dec / step_dec).quantize(Decimal('1'), rounding=ROUND_DOWN) * step_dec
                         half_qty_rounded = float(quantized_half)
                         
+                        # Formata para string respeitando o número de casas decimais exato da exchange
+                        if '.' in step_size_str:
+                            precision_decimals = len(step_size_str.split('.')[1].rstrip('0'))
+                            half_qty_rounded = round(half_qty_rounded, precision_decimals) if precision_decimals > 0 else int(half_qty_rounded)
+                        else:
+                            half_qty_rounded = int(half_qty_rounded)
+
                         if half_qty_rounded > 0:
                             side_exit = 'SELL' if direction == 'LONG' else 'BUY'
                             log(f"🎯 [PARCIAL 50%] {symbol} atingiu +{cur_roi:.2f}% de ROI! Realizando 50% ({half_qty_rounded}) a mercado...")
