@@ -249,15 +249,33 @@ async def handle_user_data_stream_event(client, db, event, log):
         symbol = order.get('s')
         status = order.get('X')
         order_type = order.get('o')
+        order_side = order.get('S') # 'BUY' ou 'SELL'
+        is_reduce_only = order.get('R', False) # True se for ordem de redução/fechamento
         
-        if status == 'FILLED' and order_type in ['TAKE_PROFIT_MARKET', 'STOP_MARKET', 'MARKET', 'TRAILING_STOP_MARKET']:
-            # Verifica se o símbolo está ativo para fechar e limpar
+        # Só processa se for execução preenchida (FILLED)
+        if status == 'FILLED':
             active_futures_positions = await futures_state.get_all()
             if symbol in active_futures_positions:
+                pos = active_futures_positions[symbol]
+                direction = pos.get('direction', 'LONG')
+                
+                # Identifica se a ordem é de SAÍDA (TP, SL ou contra a posição)
+                is_exit_order = (
+                    is_reduce_only or 
+                    order_type in ['TAKE_PROFIT_MARKET', 'STOP_MARKET', 'TRAILING_STOP_MARKET'] or
+                    (direction == 'LONG' and order_side == 'SELL') or
+                    (direction == 'SHORT' and order_side == 'BUY')
+                )
+                
+                # Se for a ordem de ENTRADA sendo preenchida a mercado, NÃO fecha a posição!
+                if not is_exit_order:
+                    return
+                
+                # Remove a posição do estado agora que uma ordem de saída foi executada
                 pos = await futures_state.remove(symbol)
                 bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
                 
-                log(f"🎯 [UDS] Execução detectada para {symbol} ({status}). Limpando ordens órfãs...")
+                log(f"🎯 [UDS] Execução de SAÍDA detectada para {symbol} ({order_type} {order_side}). Limpando ordens órfãs...")
                 await robust_cancel_all_orders(client, symbol, log)
                 
                 realized_pnl = float(order.get('rp', 0))
