@@ -163,9 +163,14 @@ async def get_account_balances():
             bnb_price_usdt = await get_bnb_price(_balance_client)
             bnb_balance_usdt = bnb_balance_free * bnb_price_usdt
         usdt_balance = await get_usdt_balance(_balance_client)
+        
+        # Busca Saldo de Futuros
+        from services.binance_client import get_futures_usdt_balance
+        futures_balance = await get_futures_usdt_balance(_balance_client)
 
         _cached_balances = {
-            'bnb': bnb_balance_free, 'bnb_usdt': bnb_balance_usdt, 'usdt': usdt_balance
+            'bnb': bnb_balance_free, 'bnb_usdt': bnb_balance_usdt, 'usdt': usdt_balance,
+            'futures_usdt': futures_balance
         }
         _last_balance_time = now
         return _cached_balances

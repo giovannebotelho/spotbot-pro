@@ -365,6 +365,8 @@ async def update_data():
             if bnb_val: bnb_val.text = f"{balances['bnb']:.4f}"
             if bnb_usdt_val: bnb_usdt_val.text = f"~${balances['bnb_usdt']:.2f}"
             if usdt_val: usdt_val.text = f"${balances['usdt']:.2f}"
+            if futures_usdt_val and 'futures_usdt' in balances:
+                futures_usdt_val.text = f"${balances['futures_usdt']:.2f}"
         
         stats = await asyncio.to_thread(db.get_stats)
         if total_profit_val:
@@ -1005,7 +1007,7 @@ async def index():
                     ui.label('⚡ SCANNER TOP 6 ELITE').classes('font-mono text-[0.65rem] font-bold text-emerald-400')
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-emerald-500/30 shadow-[inset_0_0_15px_rgba(16,185,129,0.05)]'):
                     ui.label('Alavancagem').classes('text-xs text-slate-400')
-                    ui.label('Dinâmica (até 50x)').classes('font-mono text-[0.65rem] font-bold text-emerald-400')
+                    ui.label('Dinâmica (até 20x)').classes('font-mono text-[0.65rem] font-bold text-emerald-400')
                 with ui.row().classes('w-full justify-between items-center p-2 rounded-xl glass-panel border border-emerald-500/30 shadow-[inset_0_0_15px_rgba(16,185,129,0.05)]'):
                     ui.label('Saldo Futuros').classes('text-xs text-slate-400')
                     futures_usdt_val = ui.label('$0.00').classes('font-mono text-sm font-bold text-emerald-400')
