@@ -174,9 +174,13 @@ async def run_trailing_lock_monitor(client, log=print):
                 elif peak_roi >= 50.0:
                     new_locked_roi = max(new_locked_roi, 35.0)  # Se bateu 50% ROI, garante pelo menos 35%
                 elif peak_roi >= 25.0:
-                    new_locked_roi = max(new_locked_roi, 15.0)  # Se bateu 25% ROI, garante pelo menos 15%
+                    new_locked_roi = max(new_locked_roi, 16.0)  # Se bateu 25% ROI, garante pelo menos 16%
                 elif peak_roi >= 12.0:
-                    new_locked_roi = max(new_locked_roi, 6.0)   # Se bateu 12% ROI, garante pelo menos 6%
+                    new_locked_roi = max(new_locked_roi, 7.5)   # Se bateu 12% ROI, garante pelo menos 7.5%
+                elif peak_roi >= 8.0:
+                    new_locked_roi = max(new_locked_roi, 4.5)   # Se bateu 8% ROI, garante pelo menos 4.5% de lucro limpo
+                elif peak_roi >= 6.0:
+                    new_locked_roi = max(new_locked_roi, 2.5)   # Se bateu 6% ROI, garante 2.5% (paga taxas e sobra lucro verde!)
 
                 if new_locked_roi > current_locked_roi:
                     await futures_state.update(symbol, 'locked_profit_roi', new_locked_roi)
