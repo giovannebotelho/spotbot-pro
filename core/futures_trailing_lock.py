@@ -113,12 +113,32 @@ async def run_trailing_lock_monitor(client, log=print):
                             remaining_qty = qty - half_qty_rounded
                             
                             try:
+                                # Formata o stopPrice com a precisão de preço da exchange
+                                price_prec = 4
+                                try:
+                                    ex_info = await client.futures_exchange_info()
+                                    for s_item in ex_info.get('symbols', []):
+                                        if s_item['symbol'] == symbol:
+                                            for f in s_item.get('filters', []):
+                                                if f['filterType'] == 'PRICE_FILTER':
+                                                    tick_str = f['tickSize']
+                                                    if '.' in tick_str:
+                                                        price_prec = len(tick_str.split('.')[1].rstrip('0'))
+                                                    else:
+                                                        price_prec = 0
+                                            break
+                                except Exception:
+                                    pass
+
+                                be_stop_price = round(entry_price, price_prec) if price_prec > 0 else int(entry_price)
+
                                 await client.futures_create_order(
                                     symbol=symbol, side=side_exit, type='STOP_MARKET',
-                                    stopPrice=entry_price, closePosition='true'
+                                    stopPrice=be_stop_price, closePosition='true'
                                 )
+                                log(f"🛡️ [BREAKEVEN-ORDEM] Ordem STOP_MARKET colocada na Binance a ${be_stop_price} para proteger os 50% restantes!")
                             except Exception as sl_err:
-                                log(f"⚠️ Aviso ao recriar SL Breakeven em {symbol}: {sl_err}")
+                                log(f"⚠️ Aviso ao recriar SL Breakeven na Binance em {symbol}: {sl_err}")
                             
                             # Atualiza estado na memória
                             await futures_state.update(symbol, 'qty', remaining_qty)

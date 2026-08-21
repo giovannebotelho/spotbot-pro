@@ -267,15 +267,29 @@ async def handle_user_data_stream_event(client, db, event, log):
                     (direction == 'SHORT' and order_side == 'BUY')
                 )
                 
-                # Se for a ordem de ENTRADA sendo preenchida a mercado, NÃO fecha a posição!
-                if not is_exit_order:
+                # Verifica a quantidade restante na Binance para saber se foi PARCIAL ou FECHAMENTO TOTAL
+                try:
+                    positions = await client.futures_position_information(symbol=symbol)
+                    current_amt = 0.0
+                    for p in positions:
+                        if p['symbol'] == symbol:
+                            current_amt = abs(float(p.get('positionAmt', 0.0)))
+                            break
+                except Exception:
+                    current_amt = 0.0
+
+                # Se ainda resta posição na Binance (ex: Parcial 50%), NÃO encerra o trade no State!
+                if current_amt > 0.00001:
+                    log(f"🎯 [UDS] Execução PARCIAL confirmada em {symbol}. Posição remanescente: {current_amt}. Mantendo Trend Runner ativo!")
+                    await futures_state.update(symbol, 'qty', current_amt)
+                    await futures_state.update(symbol, 'partial_taken', True)
                     return
-                
-                # Remove a posição do estado agora que uma ordem de saída foi executada
+
+                # Se a posição realmente zerou na Binance, finaliza e limpa tudo
                 pos = await futures_state.remove(symbol)
                 bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
                 
-                log(f"🎯 [UDS] Execução de SAÍDA detectada para {symbol} ({order_type} {order_side}). Limpando ordens órfãs...")
+                log(f"🎯 [UDS] Fechamento TOTAL detectado para {symbol} ({order_type} {order_side}). Limpando ordens órfãs...")
                 await robust_cancel_all_orders(client, symbol, log)
                 
                 realized_pnl = float(order.get('rp', 0))
@@ -283,9 +297,9 @@ async def handle_user_data_stream_event(client, db, event, log):
                 if exit_price == 0:
                     exit_price = float(order.get('sp', 0))
                     
-                entry_price = pos.get('entry', 0.0)
-                qty = pos.get('qty', 0.0)
-                direction = pos.get('direction', 'LONG')
+                entry_price = pos.get('entry', 0.0) if pos else 0.0
+                qty = pos.get('qty', 0.0) if pos else 0.0
+                direction = pos.get('direction', 'LONG') if pos else 'LONG'
                 
                 await register_futures_trade(client, db, symbol, direction, entry_price, exit_price, qty, log, realized_pnl)
 
