@@ -621,10 +621,10 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         else:
                             if '[GEMINI-AI]' in trigger_reason:
                                 tp_dist = atr_val * 1.5
-                                sl_dist = atr_val * 1.0
+                                sl_dist = atr_val * 0.8
                             else:
                                 tp_dist = atr_val * 2.5  # Alvo Quant 2.5x ATR (Relação R:R Assimétrica Positiva)
-                                sl_dist = atr_val * 1.5  # Stop Institucional 1.5x ATR
+                                sl_dist = atr_val * 1.0  # Stop Institucional Calibrado em 1.0x ATR (Perda Controlada)
                             
                             if direction == 'LONG':
                                 tp_price = cur_price + tp_dist

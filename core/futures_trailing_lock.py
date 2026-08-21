@@ -70,7 +70,8 @@ async def run_trailing_lock_monitor(client, log=print):
                 # Cálculo de Metas Adaptativas por Volatilidade (ATR Dinâmico)
                 # Volatilidade alta -> alvos maiores; Volatilidade baixa -> alvos curtos
                 adaptive_tp_roi = max(4.5, min(12.0, atr_pct * leverage * 100 * 0.9))
-                adaptive_preventive_sl = -max(7.5, min(14.0, atr_pct * leverage * 100 * 1.1))
+                # Stop Preventivo Rígido: Travado no teto de -7.0% de ROI (para perdas pequenas e controladas)
+                adaptive_preventive_sl = -max(5.0, min(7.5, atr_pct * leverage * 100 * 0.7))
 
                 # -------------------------------------------------------------
                 # 🏆 ARQUITETURA HEDGE FUND: TREND RUNNER DINÂMICO ESCALÁVEL
