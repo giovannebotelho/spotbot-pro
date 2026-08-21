@@ -93,62 +93,65 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     tp_price = float(tp_order['triggerPrice']) if tp_order else (entry_price * 1.03 if direction == 'LONG' else entry_price * 0.97)
                     sl_price = float(sl_order['triggerPrice']) if sl_order else (entry_price * 0.98 if direction == 'LONG' else entry_price * 1.02)
                 
-                    if tp_order and sl_order:
-                        # Busca step_size no symbols_info
-                        s_info = symbols_info.get(rec_symbol, {})
-                        rec_step_str = "0.001"
-                        if s_info:
-                            for f in s_info.get('filters', []):
-                                if f['filterType'] == 'LOT_SIZE':
-                                    rec_step_str = f['stepSize']
+                    # Busca step_size no symbols_info
+                    s_info = symbols_info.get(rec_symbol, {})
+                    rec_step_str = "0.001"
+                    if s_info:
+                        for f in s_info.get('filters', []):
+                            if f['filterType'] == 'LOT_SIZE':
+                                rec_step_str = f['stepSize']
 
-                        await futures_state.add(rec_symbol, {
-                            'entry': entry_price, 'tp': tp_price, 'sl': sl_price, 'direction': direction,
-                            'qty': qty, 'step_size': rec_step_str
-                        })
-                        bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
-                        bot_futures_status_data['target_asset'] = rec_symbol
-                    
-                        try:
-                            import pandas as pd
-                            import datetime as dt_module
-                            klines_raw = await get_futures_klines(client, symbol=rec_symbol, interval=TRADING_CONFIG['interval'], limit=100)
-                            if klines_raw:
-                                klines_rec = [float(k[4]) for k in klines_raw]
-                                dates_rec = [dt_module.datetime.fromtimestamp(float(k[0])/1000).strftime('%H:%M') for k in klines_raw]
-                                volumes_rec = [float(k[5]) for k in klines_raw]
-                            
-                                df_rec = pd.DataFrame({'close': klines_rec})
-                                sma20 = df_rec['close'].rolling(window=20).mean()
-                                std20 = df_rec['close'].rolling(window=20).std()
-                                bb_upper = (sma20 + 2 * std20).where(pd.notnull(sma20), None).tolist()
-                                bb_lower = (sma20 - 2 * std20).where(pd.notnull(sma20), None).tolist()
-                                ema200 = df_rec['close'].ewm(span=min(200, len(klines_rec)), adjust=False).mean().where(pd.notnull(df_rec['close']), None).tolist()
+                    # Se não houver TP/SL na Binance, calcula dinamicamente para não deixar órfão
+                    if not tp_order or not sl_order:
+                        log(f"🛡️ [STATE RECOVERY PRO] Adotando posição órfã de {rec_symbol} com TP/SL dinâmicos de proteção...")
+                        
+                    await futures_state.add(rec_symbol, {
+                        'entry': entry_price, 'tp': tp_price, 'sl': sl_price, 'direction': direction,
+                        'qty': qty, 'step_size': rec_step_str, 'leverage': 20, 'partial_taken': False
+                    })
+                    bot_futures_status_data['active_symbols'] = list((await futures_state.get_all()).keys())
+                    bot_futures_status_data['target_asset'] = rec_symbol
+                
+                    try:
+                        import pandas as pd
+                        import datetime as dt_module
+                        klines_raw = await get_futures_klines(client, symbol=rec_symbol, interval=TRADING_CONFIG['interval'], limit=100)
+                        if klines_raw:
+                            klines_rec = [float(k[4]) for k in klines_raw]
+                            dates_rec = [dt_module.datetime.fromtimestamp(float(k[0])/1000).strftime('%H:%M') for k in klines_raw]
+                            volumes_rec = [float(k[5]) for k in klines_raw]
+                        
+                            df_rec = pd.DataFrame({'close': klines_rec})
+                            sma20 = df_rec['close'].rolling(window=20).mean()
+                            std20 = df_rec['close'].rolling(window=20).std()
+                            bb_upper = (sma20 + 2 * std20).where(pd.notnull(sma20), None).tolist()
+                            bb_lower = (sma20 - 2 * std20).where(pd.notnull(sma20), None).tolist()
+                            ema200 = df_rec['close'].ewm(span=min(200, len(klines_rec)), adjust=False).mean().where(pd.notnull(df_rec['close']), None).tolist()
 
-                                shared_futures_market_data['dates'] = dates_rec
-                                shared_futures_market_data['klines'] = [[float(k[1]), float(k[4]), float(k[3]), float(k[2])] for k in klines_raw]
-                                shared_futures_market_data['bb_upper'] = bb_upper[-100:]
-                                shared_futures_market_data['bb_lower'] = bb_lower[-100:]
-                                shared_futures_market_data['ema200'] = ema200[-100:]
-                                shared_futures_market_data['volumes'] = volumes_rec
-                        except Exception as k_err:
-                            log(f"⚠️ Aviso ao carregar klines no State Recovery Futuros: {k_err}")
+                            shared_futures_market_data['dates'] = dates_rec
+                            shared_futures_market_data['klines'] = [[float(k[1]), float(k[4]), float(k[3]), float(k[2])] for k in klines_raw]
+                            shared_futures_market_data['bb_upper'] = bb_upper[-100:]
+                            shared_futures_market_data['bb_lower'] = bb_lower[-100:]
+                            shared_futures_market_data['ema200'] = ema200[-100:]
+                            shared_futures_market_data['volumes'] = volumes_rec
+                    except Exception as k_err:
+                        log(f"⚠️ Aviso ao carregar klines no State Recovery Futuros: {k_err}")
 
-                        log(f"🛡️ Retomando monitoramento de \033[1;33m{rec_symbol}\033[0m sem cancelar a operação...")
-                        futures_bg_tasks.append(asyncio.create_task(monitor_futures_lifecycle(
-                            client, bsm, rec_symbol, direction, entry_price, qty,
-                            tp_order.get('algoId'), sl_order.get('algoId'), tp_price, sl_price, db,
-                            bot_futures_status_data, log, status
-                        )))
-                        if TELEGRAM_CONFIG.get('bot_token') and TELEGRAM_CONFIG.get('chat_id'):
-                            asyncio.create_task(send_telegram_message(
-                                TELEGRAM_CONFIG['bot_token'], TELEGRAM_CONFIG['chat_id'],
-                                f"🔄 <b>FUTURES State Recovery Ativado!</b>\n\n"
-                                f"🪙 Par: <b>{rec_symbol}</b> ({direction})\n"
-                                f"🛡️ Posição adotada da nuvem para monitoramento ativo!"
-                            ))
-                    else:
-                        log(f"⚠️ Posição órfã em {rec_symbol} sem Stop Loss! Recomenda-se fechar manualmente.")
+                    log(f"🛡️ Retomando monitoramento de \033[1;33m{rec_symbol}\033[0m com Trailing Lock & Parcial ativa...")
+                    futures_bg_tasks.append(asyncio.create_task(monitor_futures_lifecycle(
+                        client, bsm, rec_symbol, direction, entry_price, qty,
+                        tp_order.get('algoId') if tp_order else None, 
+                        sl_order.get('algoId') if sl_order else None, 
+                        tp_price, sl_price, db,
+                        bot_futures_status_data, log, status
+                    )))
+                    if TELEGRAM_CONFIG.get('bot_token') and TELEGRAM_CONFIG.get('chat_id'):
+                        asyncio.create_task(send_telegram_message(
+                            TELEGRAM_CONFIG['bot_token'], TELEGRAM_CONFIG['chat_id'],
+                            f"🔄 <b>FUTURES State Recovery Ativado!</b>\n\n"
+                            f"🪙 Par: <b>{rec_symbol}</b> ({direction})\n"
+                            f"🛡️ Posição adotada para monitoramento ativo com Trailing & Breakeven!"
+                        ))
         except Exception as e:
             log(f"⚠️ Erro no State Recovery do Futuros: {e}")
 
