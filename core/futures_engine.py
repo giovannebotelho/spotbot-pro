@@ -483,6 +483,22 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
 
                     # --- ALINHAMENTO MULTI-TIMEFRAME & WHALE TRACKER (Lazy Load) ---
                     if direction:
+                        # 0. Macro Regime & Overextension Shield (Visão Diária 1D Anti-Topo)
+                        try:
+                            from core.futures_macro_shield import evaluate_macro_regime
+                            allow_l, allow_s, macro_reason, m_score = await evaluate_macro_regime(client, symbol, log)
+                            
+                            if direction == 'LONG' and not allow_l:
+                                log(macro_reason)
+                                direction = None
+                            elif direction == 'SHORT' and not allow_s:
+                                log(macro_reason)
+                                direction = None
+                            elif m_score:
+                                log_throttled(f"🌍 [MACRO 1D] {symbol} saudável. (RSI 1D: {m_score.get('rsi_1d', 50):.1f}, Dist EMA20: {m_score.get('dist_ema20_1d', 0):+.1f}%)", f"macro_{symbol}", log, 1800)
+                        except Exception as m_err:
+                            log(f"⚠️ Erro no Macro Shield 1D de {symbol}: {m_err}")
+
                         # 1. MTF 1H EMA20
                         try:
                             klines_1h = await get_futures_klines(client, symbol, interval='1h', limit=50)
