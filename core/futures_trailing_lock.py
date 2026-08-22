@@ -139,13 +139,13 @@ async def run_trailing_lock_monitor(client, log=print):
                                 )
                                 log(f"🛡️ [BREAKEVEN-ORDEM] Ordem STOP_MARKET colocada na Binance a ${be_stop_price} para proteger os 50% restantes!")
                             except Exception as sl_err:
-                                log(f"⚠️ Aviso ao recriar SL Breakeven na Binance em {symbol}: {sl_err}")
+                                log(f"⚠️ Aviso ao recriar SL Breakeven na Binance em {symbol}: {sl_err} (Proteção de software ativa em memória!)")
                             
                             # Atualiza estado na memória
                             await futures_state.update(symbol, 'qty', remaining_qty)
                             await futures_state.update(symbol, 'partial_taken', True)
                             await futures_state.update(symbol, 'sl', entry_price)
-                            await futures_state.update(symbol, 'locked_profit_roi', 0.0)
+                            await futures_state.update(symbol, 'locked_profit_roi', 0.2) # Garante piso positivo mínimo
                             
                             log(f"🛡️ [BREAKEVEN] Stop Loss de {symbol} movido para o preço de entrada (${entry_price:.4f}). Risco ZERO ativado! Liberando Modo Runner 🚀")
                             
@@ -165,6 +165,14 @@ async def run_trailing_lock_monitor(client, log=print):
                     except Exception as p_err:
                         log(f"⚠️ Aviso na execução parcial de {symbol}: {p_err}")
 
+                # FASE 1.5: BLINDAGEM INCONDICIONAL DE BREAKEVEN (Se parcial já foi feita e preço recuou para o zero)
+                if partial_taken and qty > 0:
+                    is_at_or_below_be = (direction == 'LONG' and cur_price <= entry_price) or (direction == 'SHORT' and cur_price >= entry_price) or (cur_roi <= 0.0)
+                    if is_at_or_below_be:
+                        log(f"🛡️ [BREAKEVEN-EXEC] {symbol} recuou para o preço de entrada (${cur_price:.4f} <= ${entry_price:.4f} | ROI: {cur_roi:.2f}%). Ejetando os 50% restantes no 0x0!")
+                        await execute_trailing_close(client, symbol, direction, qty, log)
+                        continue
+
                 # FASE 2: Escada de Lucro Blindado (Trailing Step Lock)
                 # Conforme o ROI sobe, vamos subindo o piso mínimo de lucro garantido
                 current_locked_roi = pos.get('locked_profit_roi', 0.0)
@@ -182,6 +190,8 @@ async def run_trailing_lock_monitor(client, log=print):
                     new_locked_roi = max(new_locked_roi, 4.5)   # Se bateu 8% ROI, garante pelo menos 4.5% de lucro limpo
                 elif peak_roi >= 6.0:
                     new_locked_roi = max(new_locked_roi, 2.5)   # Se bateu 6% ROI, garante 2.5% (paga taxas e sobra lucro verde!)
+                elif partial_taken and peak_roi >= 3.5:
+                    new_locked_roi = max(new_locked_roi, 0.5)   # Garante que após parcial nunca fica negativo
 
                 if new_locked_roi > current_locked_roi:
                     await futures_state.update(symbol, 'locked_profit_roi', new_locked_roi)
@@ -208,9 +218,15 @@ async def run_trailing_lock_monitor(client, log=print):
                         await execute_trailing_close(client, symbol, direction, qty, log)
                         continue
 
-                # FASE 4: Stop Preventivo Rígido (Se nunca entrou em lucro e o trade foi direto contra)
+                # FASE 4: Stop Preventivo Rígido Incondicional (Proteção absoluta contra derretimento)
                 if not partial_taken and cur_roi <= adaptive_preventive_sl:
                     log(f"⚡ [STOP PREVENTIVO] {symbol} atingiu tolerância máxima negativa ({cur_roi:.2f}% <= {adaptive_preventive_sl:.1f}%). Fechando antes do SL rígido!")
+                    await execute_trailing_close(client, symbol, direction, qty, log)
+                    continue
+                
+                # FASE 5: Stop de Emergência Hard-Cap Absoluto (-5.5% ROI Max)
+                if cur_roi <= -5.5:
+                    log(f"🚨 [STOP EMERGÊNCIA] {symbol} atingiu o limite de corte de emergência ({cur_roi:.2f}% <= -5.5%). Fechando imediatamente!")
                     await execute_trailing_close(client, symbol, direction, qty, log)
                     continue
                             
@@ -236,5 +252,9 @@ async def execute_trailing_close(client, symbol, direction, qty, log):
             else:
                 log(f"✅ [TRAILING-LOCK] Posição já parece estar fechada.")
                 
+        # 3. Limpa estado na memória para não tentar re-executar
+        await futures_state.remove(symbol)
+                
     except Exception as e:
         log(f"❌ Erro crítico no Trailing Lock de {symbol}: {e}")
+

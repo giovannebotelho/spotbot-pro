@@ -216,6 +216,25 @@ async def place_futures_trade_with_protection(client, symbol, side, qty, tp_pric
         # Determina lado de saída
         exit_side = 'SELL' if side == 'BUY' else 'BUY'
 
+        # Busca precisão de preço da exchange para garantir que ordens STOP_MARKET e TAKE_PROFIT_MARKET nunca sejam rejeitadas
+        try:
+            ex_info = await client.futures_exchange_info()
+            for s_item in ex_info.get('symbols', []):
+                if s_item['symbol'] == symbol:
+                    for f in s_item.get('filters', []):
+                        if f['filterType'] == 'PRICE_FILTER':
+                            tick_str = f['tickSize']
+                            if '.' in tick_str:
+                                p_prec = len(tick_str.split('.')[1].rstrip('0'))
+                                sl_price = round(sl_price, p_prec) if p_prec > 0 else int(sl_price)
+                                tp_price = round(tp_price, p_prec) if p_prec > 0 else int(tp_price)
+                            else:
+                                sl_price = int(sl_price)
+                                tp_price = int(tp_price)
+                    break
+        except Exception:
+            pass
+
         # 2. Ordem SL (Stop Market com closePosition)
         sl_order = await client.futures_create_order(
             symbol=symbol, side=exit_side, type='STOP_MARKET',

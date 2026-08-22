@@ -418,11 +418,11 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         has_bullish_defense = any(p in candle_patterns for p in ["Hammer", "Bullish Engulfing", "Piercing Line", "Bullish Kicker"])
                         has_bearish_defense = any(p in candle_patterns for p in ["Shooting Star", "Bearish Engulfing", "Dark Cloud Cover", "Bearish Kicker"])
                     
-                        if direction == 'LONG' and has_bearish_defense and '[PRICE ACTION]' not in trigger_reason:
+                        if direction == 'LONG' and has_bearish_defense:
                             log(f"🛡️ [CANDLE SHIELD] Bloqueando LONG em {symbol} devido à vela forte de rejeição ({candle_patterns[0]}).")
                             direction = None
                         
-                        elif direction == 'SHORT' and has_bullish_defense and '[PRICE ACTION]' not in trigger_reason:
+                        elif direction == 'SHORT' and has_bullish_defense:
                             log(f"🛡️ [CANDLE SHIELD] Bloqueando SHORT em {symbol} devido à vela forte de rejeição ({candle_patterns[0]}).")
                             direction = None
                         
@@ -432,25 +432,21 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         candle_variation = (abs(cur_price - cur_open) / cur_open) * 100
                     
                         if direction == 'SHORT' and is_green_candle and candle_variation > 0.35:
-                            if '[PRICE ACTION]' not in trigger_reason:
-                                log_throttled(f"🛡️ [ANTI-FOGUETE] Bloqueando SHORT em {symbol} pois a vela de alta é muito forte ({candle_variation:.2f}%). Aguardando exaustão!", f"foguete_{symbol}", log, 600)
-                                direction = None
+                            log_throttled(f"🛡️ [ANTI-FOGUETE] Bloqueando SHORT em {symbol} pois a vela de alta é muito forte ({candle_variation:.2f}%). Aguardando exaustão!", f"foguete_{symbol}", log, 600)
+                            direction = None
                             
                         elif direction == 'LONG' and is_red_candle and candle_variation > 0.35:
-                            if '[PRICE ACTION]' not in trigger_reason:
-                                log_throttled(f"🛡️ [ANTI-FACA] Bloqueando LONG em {symbol} pois a vela de baixa é muito forte ({candle_variation:.2f}%). Aguardando exaustão!", f"faca_{symbol}", log, 600)
-                                direction = None
+                            log_throttled(f"🛡️ [ANTI-FACA] Bloqueando LONG em {symbol} pois a vela de baixa é muito forte ({candle_variation:.2f}%). Aguardando exaustão!", f"faca_{symbol}", log, 600)
+                            direction = None
                         
                         elif direction == 'LONG' and macd_hist_curr > 0 and macd_hist_curr < macd_hist_prev:
-                            if '[PRICE ACTION]' not in trigger_reason and '[BAND-SNIPER' not in trigger_reason:
-                                log_throttled(f"🛡️ [MACD EXAUSTÃO] Bloqueando LONG em {symbol} pois a força compradora no MACD já está caindo.", f"macd_long_{symbol}", log, 600)
-                                direction = None
+                            log_throttled(f"🛡️ [MACD EXAUSTÃO] Bloqueando LONG em {symbol} pois a força compradora no MACD já está caindo.", f"macd_long_{symbol}", log, 600)
+                            direction = None
                             
                         elif direction == 'SHORT' and macd_hist_curr < 0 and macd_hist_curr > macd_hist_prev:
-                            if '[PRICE ACTION]' not in trigger_reason and '[BAND-SNIPER' not in trigger_reason:
-                                log_throttled(f"🛡️ [MACD EXAUSTÃO] Bloqueando SHORT em {symbol} pois a força vendedora no MACD já está caindo.", f"macd_ex_{symbol}", log, 600)
-                                direction = None
-                            
+                            log_throttled(f"🛡️ [MACD EXAUSTÃO] Bloqueando SHORT em {symbol} pois a força vendedora no MACD já está caindo.", f"macd_ex_{symbol}", log, 600)
+                            direction = None
+                        
                         elif direction == 'SHORT' and rsi > 78:
                             log_throttled(f"🛡️ [MOMENTUM EXTREMO] Bloqueando SHORT em {symbol} pois o RSI está parabólico (RSI: {rsi:.1f}).", f"mom_short_{symbol}", log, 600)
                             direction = None
@@ -652,9 +648,9 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         # Calcula a distância percentual do Stop Loss
                         sl_pct_dist = abs(cur_price - sl_price) / cur_price
                         
-                        # Alavancagem Dinâmica Inteligente: Travado em 20x max para garantir margem de manobra e evitar liquidação por ruído
+                        # Alavancagem Dinâmica Inteligente: Travado em 10x max para garantir margem de manobra institucional e evitar liquidação por ruído
                         raw_leverage = 1.0 / (sl_pct_dist * 2.0) if sl_pct_dist > 0 else 1.0
-                        initial_leverage = max(3, min(20, int(raw_leverage)))
+                        initial_leverage = max(3, min(10, int(raw_leverage)))
                         
                         log(f"⚙️ \033[1;36mDynamic Leverage\033[0m: Stop a {sl_pct_dist*100:.2f}% | Alavancagem Institucional: \033[1;33m{initial_leverage}x\033[0m")
                         
