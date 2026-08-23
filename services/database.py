@@ -311,6 +311,7 @@ class DatabaseManager:
     def get_stats(self):
         global _stats_cache, _last_stats_time
         import time
+        from config.settings import STATS_BASELINE_ID
         now = time.time()
         if _stats_cache is not None and (now - _last_stats_time < 15.0):
             return _stats_cache
@@ -319,23 +320,23 @@ class DatabaseManager:
             conn = self.get_connection()
             try:
                 cursor = conn.cursor()
-                baseline_clause = f"AND id >= {STATS_BASELINE_ID}" if STATS_BASELINE_ID > 0 else ""
+                baseline_clause = f"AND id > {STATS_BASELINE_ID}" if STATS_BASELINE_ID > 0 else ""
                 
                 cursor.execute(f"SELECT COUNT(*) as total FROM trades WHERE (market_type = 'SPOT' OR market_type IS NULL) {baseline_clause}")
                 row = cursor.fetchone()
-                spot_trades = row["total"] if self.is_postgres else row[0]
+                spot_trades = (row["total"] if self.is_postgres else row[0]) or 0
                 
                 cursor.execute(f"SELECT COUNT(*) as wins FROM trades WHERE (oco_result = 'profit' OR trade_result_net > 0) AND (market_type = 'SPOT' OR market_type IS NULL) {baseline_clause}")
                 row_wins = cursor.fetchone()
-                spot_wins = row_wins["wins"] if self.is_postgres else row_wins[0]
+                spot_wins = (row_wins["wins"] if self.is_postgres else row_wins[0]) or 0
                 
                 cursor.execute(f"SELECT COUNT(*) as total FROM trades WHERE market_type = 'FUTURES' {baseline_clause}")
                 row_fut = cursor.fetchone()
-                futures_trades = row_fut["total"] if self.is_postgres else row_fut[0]
+                futures_trades = (row_fut["total"] if self.is_postgres else row_fut[0]) or 0
 
                 cursor.execute(f"SELECT COUNT(*) as wins FROM trades WHERE trade_result_net > 0 AND market_type = 'FUTURES' {baseline_clause}")
                 row_fut_wins = cursor.fetchone()
-                futures_wins = row_fut_wins["wins"] if self.is_postgres else row_fut_wins[0]
+                futures_wins = (row_fut_wins["wins"] if self.is_postgres else row_fut_wins[0]) or 0
 
                 cursor.execute(f"SELECT SUM(trade_result_net) as net_sum FROM trades WHERE (market_type = 'SPOT' OR market_type IS NULL) {baseline_clause}")
                 row_sum = cursor.fetchone()
@@ -347,8 +348,8 @@ class DatabaseManager:
                 fut_result = row_fut_sum["net_sum"] if self.is_postgres else row_fut_sum[0]
                 futures_net_profit = float(fut_result) if fut_result is not None else 0.0
                 
-                spot_win_rate = (spot_wins / spot_trades * 100) if spot_trades > 0 else 0
-                futures_win_rate = (futures_wins / futures_trades * 100) if futures_trades > 0 else 0
+                spot_win_rate = (spot_wins / spot_trades * 100.0) if spot_trades > 0 else 0.0
+                futures_win_rate = (futures_wins / futures_trades * 100.0) if futures_trades > 0 else 0.0
                 total_net_profit = spot_net_profit + futures_net_profit
                 
                 # Cálculo de Métricas Quantitativas de Hedge Fund (Sharpe Ratio, Profit Factor, Max Drawdown)

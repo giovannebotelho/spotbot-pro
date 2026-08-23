@@ -299,7 +299,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     # Análise de Volume Relativo (Pico recente)
                     vol_sma = pd.Series(volumes_rec).rolling(10).mean().tolist()[-1] if len(volumes_rec) >= 10 else 0
                     cur_vol = volumes_rec[-1]
-                    has_volume_spike = (cur_vol > (vol_sma * 1.3)) if vol_sma > 0 else True
+                    has_volume_spike = (cur_vol >= (vol_sma * 0.90)) if vol_sma > 0 else True
                 
                     # Análise de Distância da EMA20
                     ema20_val = pd.Series(closes).ewm(span=20, adjust=False).mean().iloc[-1]
@@ -322,16 +322,16 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             dist_lower_bb = ((cur_price - bb_lower[-1]) / bb_lower[-1]) * 100
                             dist_upper_bb = ((cur_price - bb_upper[-1]) / bb_upper[-1]) * 100
                             
-                            # Filtro Squeeze: Verifica se o mercado está comprimido demais (< 0.8% Bandwidth) sem volume
+                            # Filtro Squeeze: Verifica se o mercado está comprimido demais (< 0.5% Bandwidth) sem volume
                             bb_width = calculate_bollinger_bandwidth(bb_upper[-1], bb_lower[-1], sma20.iloc[-1] if hasattr(sma20, 'iloc') else cur_price)
-                            if bb_width < 0.8 and not has_volume_spike:
+                            if bb_width < 0.5 and not has_volume_spike:
                                 log_throttled(f"💤 [SQUEEZE] {symbol} em compressão extrema ({bb_width:.2f}% width) sem volume. Aguardando rompimento.", f"sqz_{symbol}", log, 3600)
                                 continue
                         
-                            if dist_lower_bb < -1.5 and has_volume_spike and rsi < 25:
+                            if dist_lower_bb < -1.0 and has_volume_spike and rsi < 30:
                                 direction = 'LONG'
                                 trigger_reason = f"📉 [BAND-SNIPER 15M] Perfuração violenta da Banda Inferior ({dist_lower_bb:.2f}%) com RSI extremo ({rsi:.1f})"
-                            elif dist_upper_bb > 1.5 and has_volume_spike and rsi > 75:
+                            elif dist_upper_bb > 1.0 and has_volume_spike and rsi > 70:
                                 direction = 'SHORT'
                                 trigger_reason = f"📈 [BAND-SNIPER 15M] Fura-Teto violento da Banda Superior ({dist_upper_bb:.2f}%) com RSI extremo ({rsi:.1f})"
                             else:
@@ -370,23 +370,23 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         cvd_delta, buy_ratio, cvd_direction = 0, 0.5, None
                     
                         # Lazy Evaluation: Só busca o CVD (que consome muito peso da API) se a moeda tiver chance de dar trade (RSI extremo)
-                        if rsi < 35 or rsi > 65:
+                        if rsi < 38 or rsi > 62:
                             cvd_delta, buy_ratio, cvd_direction = await evaluate_cvd(client, symbol)
                     
                         # Exaustão Extrema: Shortar o topo que rompeu a banda superior (independente se verde ou vermelho), ou Long no fundo.
                         if bb_upper and len(bb_upper) > 0 and bb_upper[-1] and cur_price >= bb_upper[-1]:
-                            if rsi > 70:
+                            if rsi > 68:
                                 tech_dir = 'SHORT'
                         elif bb_lower and len(bb_lower) > 0 and bb_lower[-1] and cur_price <= bb_lower[-1]:
-                            if rsi < 30:
+                            if rsi < 32:
                                 tech_dir = 'LONG'
                             
                         # Smart Relaxation: Se o RSI aponta exaustão e o Tape Reading (CVD) mostra força contrária confirmada
                         if not tech_dir:
-                            if rsi < 35 and cvd_direction == 'LONG':
+                            if rsi < 38 and cvd_direction == 'LONG':
                                 tech_dir = 'LONG'
                                 log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD comprador massivo. Validando LONG antecipado em {symbol}.", f"smart_relax_{symbol}", log, 7200)
-                            elif rsi > 65 and cvd_direction == 'SHORT':
+                            elif rsi > 62 and cvd_direction == 'SHORT':
                                 tech_dir = 'SHORT'
                                 log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.", f"smart_relax_{symbol}", log, 7200)
                             
@@ -414,64 +414,64 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             
                     # --- FILTROS FINAIS (Mercado e Volume) ---
                     if direction:
-                        # Escudo de Price Action (Filtro Defensivo)
+                        # Escudo de Price Action (Filtro Defensivo contra padrões opostos fortes)
                         has_bullish_defense = any(p in candle_patterns for p in ["Hammer", "Bullish Engulfing", "Piercing Line", "Bullish Kicker"])
                         has_bearish_defense = any(p in candle_patterns for p in ["Shooting Star", "Bearish Engulfing", "Dark Cloud Cover", "Bearish Kicker"])
                     
-                        if direction == 'LONG' and has_bearish_defense:
+                        if direction == 'LONG' and has_bearish_defense and 'BAND-SNIPER' not in trigger_reason:
                             log(f"🛡️ [CANDLE SHIELD] Bloqueando LONG em {symbol} devido à vela forte de rejeição ({candle_patterns[0]}).")
                             direction = None
                         
-                        elif direction == 'SHORT' and has_bullish_defense:
+                        elif direction == 'SHORT' and has_bullish_defense and 'BAND-SNIPER' not in trigger_reason:
                             log(f"🛡️ [CANDLE SHIELD] Bloqueando SHORT em {symbol} devido à vela forte de rejeição ({candle_patterns[0]}).")
                             direction = None
                         
-                        # Filtro Anti-Foguete / Anti-Faca Caindo (Impede entrar contra uma barra de força absoluta)
+                        # Filtro Anti-Foguete / Anti-Faca Caindo (Impede entrar contra uma barra de anomalia extrema > 1.20%)
                         is_green_candle = cur_price > cur_open
                         is_red_candle = cur_price < cur_open
                         candle_variation = (abs(cur_price - cur_open) / cur_open) * 100
                     
-                        if direction == 'SHORT' and is_green_candle and candle_variation > 0.35:
-                            log_throttled(f"🛡️ [ANTI-FOGUETE] Bloqueando SHORT em {symbol} pois a vela de alta é muito forte ({candle_variation:.2f}%). Aguardando exaustão!", f"foguete_{symbol}", log, 600)
+                        if direction == 'SHORT' and is_green_candle and candle_variation > 1.20:
+                            log_throttled(f"🛡️ [ANTI-FOGUETE] Bloqueando SHORT em {symbol} pois a vela de alta é anômala ({candle_variation:.2f}%). Aguardando exaustão!", f"foguete_{symbol}", log, 600)
                             direction = None
                             
-                        elif direction == 'LONG' and is_red_candle and candle_variation > 0.35:
-                            log_throttled(f"🛡️ [ANTI-FACA] Bloqueando LONG em {symbol} pois a vela de baixa é muito forte ({candle_variation:.2f}%). Aguardando exaustão!", f"faca_{symbol}", log, 600)
+                        elif direction == 'LONG' and is_red_candle and candle_variation > 1.20:
+                            log_throttled(f"🛡️ [ANTI-FACA] Bloqueando LONG em {symbol} pois a vela de baixa é anômala ({candle_variation:.2f}%). Aguardando exaustão!", f"faca_{symbol}", log, 600)
                             direction = None
                         
-                        elif direction == 'LONG' and macd_hist_curr > 0 and macd_hist_curr < macd_hist_prev:
+                        elif direction == 'LONG' and macd_hist_curr > 0 and macd_hist_curr < (macd_hist_prev * 0.70) and '[PRICE ACTION]' in trigger_reason:
                             log_throttled(f"🛡️ [MACD EXAUSTÃO] Bloqueando LONG em {symbol} pois a força compradora no MACD já está caindo.", f"macd_long_{symbol}", log, 600)
                             direction = None
                             
-                        elif direction == 'SHORT' and macd_hist_curr < 0 and macd_hist_curr > macd_hist_prev:
+                        elif direction == 'SHORT' and macd_hist_curr < 0 and macd_hist_curr > (macd_hist_prev * 0.70) and '[PRICE ACTION]' in trigger_reason:
                             log_throttled(f"🛡️ [MACD EXAUSTÃO] Bloqueando SHORT em {symbol} pois a força vendedora no MACD já está caindo.", f"macd_ex_{symbol}", log, 600)
                             direction = None
                         
-                        elif direction == 'SHORT' and rsi > 78:
+                        elif direction == 'SHORT' and rsi > 85 and '[BAND-SNIPER' not in trigger_reason:
                             log_throttled(f"🛡️ [MOMENTUM EXTREMO] Bloqueando SHORT em {symbol} pois o RSI está parabólico (RSI: {rsi:.1f}).", f"mom_short_{symbol}", log, 600)
                             direction = None
                         
-                        elif direction == 'LONG' and rsi < 22:
+                        elif direction == 'LONG' and rsi < 15 and '[BAND-SNIPER' not in trigger_reason:
                             log_throttled(f"🛡️ [MOMENTUM EXTREMO] Bloqueando LONG em {symbol} pois o ativo está em queda livre (RSI: {rsi:.1f}).", f"mom_long_{symbol}", log, 600)
                             direction = None
                         
-                        elif not has_volume_spike and '[GEMINI-AI]' not in trigger_reason:
+                        elif not has_volume_spike and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER' not in trigger_reason:
                             log_throttled(f"⚠️ [VOLUME] {symbol} sem liquidez/volume suficiente para entrada segura. Ignorando.", f"vol_{symbol}", log, 7200)
                             direction = None
                         
-                        elif direction == 'LONG' and ema_dist_pct < 1.0 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
-                            log_throttled(f"🛡️ [EMA DIST] Bloqueando LONG em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido > 1.0%", f"ema_{symbol}", log, 600)
+                        elif direction == 'LONG' and ema_dist_pct < 0.20 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
+                            log_throttled(f"🛡️ [EMA DIST] Bloqueando LONG em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido > 0.20%", f"ema_{symbol}", log, 600)
                             direction = None
                         
-                        elif direction == 'SHORT' and ema_dist_pct > -1.0 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
-                            log_throttled(f"🛡️ [EMA DIST] Bloqueando SHORT em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido < -1.0%", f"ema_{symbol}", log, 600)
+                        elif direction == 'SHORT' and ema_dist_pct > -0.20 and '[GEMINI-AI]' not in trigger_reason and '[BAND-SNIPER 15M]' not in trigger_reason:
+                            log_throttled(f"🛡️ [EMA DIST] Bloqueando SHORT em {symbol} pois preço não rompeu a EMA20 com força (Distância: {ema_dist_pct:.2f}%). Exigido < -0.20%", f"ema_{symbol}", log, 600)
                             direction = None
                         
-                        elif direction == 'LONG' and btc_trend == 'BEAR' and symbol != 'BTCUSDT':
+                        elif direction == 'LONG' and btc_trend == 'BEAR' and symbol != 'BTCUSDT' and '[BAND-SNIPER' not in trigger_reason:
                             log(f"🛡️ [REGIME] Bloqueando LONG em {symbol} pois o BTC está em tendência de BAIXA (RSI: {btc_rsi:.1f}).")
                             direction = None
                         
-                        elif direction == 'SHORT' and btc_trend == 'BULL' and symbol != 'BTCUSDT':
+                        elif direction == 'SHORT' and btc_trend == 'BULL' and symbol != 'BTCUSDT' and '[BAND-SNIPER' not in trigger_reason:
                             log(f"🛡️ [REGIME] Bloqueando SHORT em {symbol} pois o BTC está em tendência de ALTA (RSI: {btc_rsi:.1f}).")
                             direction = None
                     # ----------------------------------------

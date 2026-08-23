@@ -78,14 +78,14 @@ async def evaluate_band_sniper(client, symbol, log=print):
         prev_high = highs[-2]
         prev_low = lows[-2]
         
-        # 1. Sinal SHORT: Rompimento Real do Teto (Exaustão Extrema) com RSI Sobrecomprado Real (>= 74)
+        # 1. Sinal SHORT: Rompimento Real do Teto (Exaustão) com RSI Sobrecomprado (>= 70)
         is_upper_pierced = cur_high >= cur_ub or prev_high >= cur_ub
         b_pct_upper = (cur_close - cur_lb) / (cur_ub - cur_lb) if (cur_ub - cur_lb) > 0 else 0
         
-        # Só dá SHORT se houve rejeição de topo (fechamento abaixo da máxima ou vela vermelha) e RSI parabólico
-        is_exhaustion_short = cur_close < cur_high and (cur_close <= prev_close or cur_close < cur_ub)
+        # Só dá SHORT se houve rejeição de topo (fechamento abaixo da máxima ou vela vermelha/neutra)
+        is_exhaustion_short = cur_close < cur_high and (cur_close <= prev_close or cur_close <= cur_ub or (cur_high - cur_close) > (cur_close - cur_low))
         
-        if (is_upper_pierced or b_pct_upper >= 1.02) and rsi >= 74 and is_exhaustion_short:
+        if (is_upper_pierced or b_pct_upper >= 1.00) and rsi >= 70 and is_exhaustion_short:
             direction = 'SHORT'
             tp_price = cur_sma
             # SL = 1.5 * ATR acima da máxima extrema (wick)
@@ -93,14 +93,14 @@ async def evaluate_band_sniper(client, symbol, log=print):
             sl_price = extreme_high + (1.5 * atr)
             return direction, tp_price, sl_price
             
-        # 2. Sinal LONG: Rompimento Real do Fundo (Exaustão Extrema) com RSI Sobrevendido Real (<= 26)
+        # 2. Sinal LONG: Rompimento Real do Fundo (Exaustão) com RSI Sobrevendido (<= 30)
         is_lower_pierced = cur_low <= cur_lb or prev_low <= cur_lb
         b_pct_lower = (cur_close - cur_lb) / (cur_ub - cur_lb) if (cur_ub - cur_lb) > 0 else 0
         
-        # Só dá LONG se houve absorção de fundo (fechamento acima da mínima) e RSI em capitulação
-        is_exhaustion_long = cur_close > cur_low and (cur_close >= prev_close or cur_close > cur_lb)
+        # Só dá LONG se houve absorção de fundo (fechamento acima da mínima ou rejeição com pavio)
+        is_exhaustion_long = cur_close > cur_low and (cur_close >= prev_close or cur_close >= cur_lb or (cur_close - cur_low) > (cur_high - cur_close))
         
-        if (is_lower_pierced or b_pct_lower <= -0.02) and rsi <= 26 and is_exhaustion_long:
+        if (is_lower_pierced or b_pct_lower <= 0.00) and rsi <= 30 and is_exhaustion_long:
             direction = 'LONG'
             tp_price = cur_sma
             # SL = 1.5 * ATR abaixo da mínima extrema (wick)

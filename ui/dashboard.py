@@ -586,16 +586,31 @@ async def update_data():
                 ai_signal_label.classes(remove='text-emerald-400 text-rose-400', add='text-amber-400')
             ai_reason_markdown.content = insight.get('justification', '**Sem justificativa disponível.**')
 
-        # Atualiza o Histórico de Posições e Ordens da Binance (com throttle inteligente de 25 segundos)
+        # Atualiza o Histórico de Posições e Ordens da Binance (com throttle inteligente de 15 segundos)
         global _last_tables_fetch, _cached_pos_rows, _cached_ord_rows
         now_ts = time.time() if 'time' in globals() else dt_module.datetime.now().timestamp()
-        if getattr(engine, 'client', None) and (now_ts - _last_tables_fetch > 25):
+        if now_ts - _last_tables_fetch > 15:
             _last_tables_fetch = now_ts
             try:
                 from services.binance_client import fetch_binance_futures_trades, fetch_binance_futures_orders
+                from binance import AsyncClient as BinanceAsyncClient
+                from config.settings import API_KEYS, PAPER_TRADING_MODE
                 
+                cli_to_use = getattr(engine, 'client', None)
+                created_cli = False
+                if not cli_to_use:
+                    if PAPER_TRADING_MODE:
+                        k = API_KEYS.get('testnet_futures', {}).get('key', '')
+                        s = API_KEYS.get('testnet_futures', {}).get('secret', '')
+                        cli_to_use = await BinanceAsyncClient.create(k, s, testnet=True)
+                    else:
+                        k = API_KEYS.get('mainnet', {}).get('key', '')
+                        s = API_KEYS.get('mainnet', {}).get('secret', '')
+                        cli_to_use = await BinanceAsyncClient.create(k, s, testnet=False)
+                    created_cli = True
+
                 # 1. Posições Fechadas / Trades com PnL
-                b_trades = await fetch_binance_futures_trades(engine.client, limit=20)
+                b_trades = await fetch_binance_futures_trades(cli_to_use, limit=20)
                 if b_trades:
                     pos_rows = []
                     for t in b_trades:
@@ -621,7 +636,7 @@ async def update_data():
                     render_positions_panel.refresh()
                 
                 # 2. Histórico de Ordens
-                b_orders = await fetch_binance_futures_orders(engine.client, limit=20)
+                b_orders = await fetch_binance_futures_orders(cli_to_use, limit=20)
                 if b_orders:
                     ord_rows = []
                     for o in b_orders:
@@ -645,6 +660,9 @@ async def update_data():
                         })
                     _cached_ord_rows = ord_rows
                     render_orders_panel.refresh()
+
+                if created_cli and cli_to_use:
+                    await cli_to_use.close_connection()
 
             except Exception as hist_err:
                 pass
@@ -1185,17 +1203,23 @@ async def index():
                     chart_symbol_badge = ui.label('🪙 BTCUSDT').classes('obsidian-card px-3 py-1 rounded-xl text-xs font-bold font-mono text-sky-400 border border-sky-500/30 backdrop-blur-md shadow-lg')
                 candle_chart = ui.echart(get_main_chart_options()).classes('w-full h-full')
 
-            # Painel Inferior — Abas Oficiais Estilo Binance (Posições, Ordens, Notícias, Terminal)
+            # Painel Inferior — Abas Oficiais Estilo Binance (Terminal, Posições, Ordens, Heatmap, Notícias)
             with ui.column().classes('w-full flex-shrink-0 bg-transparent min-h-[360px] border-t border-slate-800/80 p-0'):
                 with ui.tabs().classes('w-full bg-[#0b0e11] border-b border-white/10 px-3 text-xs min-h-[38px]').props('dense active-color=amber-400 indicator-color=amber-400 text-color=slate-400 no-caps') as bottom_tabs:
+                    tab_logs = ui.tab('terminal', label='💻 Terminal Sincronizado', icon='terminal').classes('font-bold')
                     tab_pos = ui.tab('positions', label='📊 Histórico de Posições', icon='receipt_long').classes('font-bold')
                     tab_orders = ui.tab('orders', label='📑 Histórico de Ordens', icon='list_alt').classes('font-bold')
                     tab_depth = ui.tab('depth', label='🎯 Heatmap & Livro Visual', icon='view_column').classes('font-bold')
                     tab_news = ui.tab('news', label='📰 Feed de Notícias & IA', icon='newspaper').classes('font-bold')
-                    tab_logs = ui.tab('terminal', label='💻 Terminal Sincronizado', icon='terminal').classes('font-bold')
 
-                with ui.tab_panels(bottom_tabs, value='positions').classes('w-full p-0 bg-[#0B0E11]/90 text-xs min-h-[320px]'):
-                    # 1. Painel de Posições Fechadas (Cards Glassmorphism Nativos Estilo Binance)
+                with ui.tab_panels(bottom_tabs, value='terminal').classes('w-full p-0 bg-[#0B0E11]/90 text-xs min-h-[320px]'):
+                    # 1. Terminal de Logs (Posicionado em 1º Lugar)
+                    with ui.tab_panel('terminal').classes('p-0 w-full h-80'):
+                        log_ui = ui.log(max_lines=500).classes('w-full h-full font-mono text-[0.65rem] bg-[#020617] text-emerald-400 p-3 leading-tight overflow-y-auto')
+                        for past_msg in list(logs_buffer):
+                            log_ui.push(past_msg)
+
+                    # 2. Painel de Posições Fechadas (Cards Glassmorphism Nativos Estilo Binance)
                     with ui.tab_panel('positions').classes('p-2 w-full'):
                         with ui.row().classes('w-full items-center justify-between pb-2 text-[0.65rem] text-slate-400 border-b border-white/5'):
                             ui.label('* Dados sincronizados diretamente da Binance Futures API / Banco de Dados.').classes('italic text-slate-500')
@@ -1203,11 +1227,11 @@ async def index():
                         
                         render_positions_panel()
 
-                    # 2. Painel de Ordens (Cards Glassmorphism Nativos Estilo Binance)
+                    # 3. Painel de Ordens (Cards Glassmorphism Nativos Estilo Binance)
                     with ui.tab_panel('orders').classes('p-2 w-full'):
                         render_orders_panel()
 
-                    # 3. Heatmap de Liquidez e Profundidade de Livro (Depth Heatmap)
+                    # 4. Heatmap de Liquidez e Profundidade de Livro (Depth Heatmap)
                     with ui.tab_panel('depth').classes('p-3 w-full'):
                         with ui.column().classes('w-full gap-3'):
                             with ui.row().classes('w-full justify-between items-center pb-2 border-b border-white/10'):
@@ -1237,7 +1261,7 @@ async def index():
                                             ui.label(f'Bids: {b_vol}').classes('text-[#0ECB81] font-semibold')
                                             ui.label(f'Asks: {a_vol}').classes('text-[#F6465D] font-semibold')
 
-                    # 3. Feed de Notícias & Sentimento IA
+                    # 5. Feed de Notícias & Sentimento IA
                     with ui.tab_panel('news').classes('p-3 w-full'):
                         with ui.column().classes('w-full gap-2.5'):
                             with ui.row().classes('w-full p-2.5 rounded-xl glass-panel border border-emerald-500/30 items-center justify-between'):
@@ -1257,12 +1281,6 @@ async def index():
                                     ui.label('🔴 [BEARISH] Altcoins de baixa liquidez registram liquidações pontuais com aumento de volatilidade.').classes('font-bold text-slate-200 text-xs')
                                     ui.label('Fonte: Coinglass • Filtro Anti-Violinada Ativo').classes('text-[0.65rem] text-rose-400 font-mono')
                                 ui.label('Há 1h').classes('text-[0.65rem] text-slate-500 font-mono')
-
-                    # 4. Terminal de Logs
-                    with ui.tab_panel('terminal').classes('p-0 w-full h-80'):
-                        log_ui = ui.log(max_lines=500).classes('w-full h-full font-mono text-[0.65rem] bg-[#020617] text-emerald-400 p-3 leading-tight overflow-y-auto')
-                        for past_msg in list(logs_buffer):
-                            log_ui.push(past_msg)
 
     ui.timer(8.0, update_data)
 
