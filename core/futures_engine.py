@@ -514,20 +514,22 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         except Exception as e:
                             log(f"⚠️ Erro ao checar MTF de {symbol}: {e}")
                         
-                        # 2. Smart Money & Whale Tracker (Evolução v2)
+                        # 2. Smart Money & Whale Tracker (Evolução v3)
                         if direction:
                             from core.futures_smart_money import evaluate_smart_money
-                            sm_dir, top_ratio, taker_ratio = await evaluate_smart_money(client, symbol, '15m', log)
+                            sm_dir, sm_score, sm_metrics = await evaluate_smart_money(client, symbol, '15m', log)
+                            top_ratio = sm_metrics.get('top_ratio', 1.0)
+                            taker_ratio = sm_metrics.get('taker_ratio', 1.0)
                         
-                            # Bloqueio Defensivo: Se o Smart Money (Taker + Top Traders) for totalmente contra nós
-                            if direction == 'LONG' and sm_dir == 'SHORT':
-                                log(f"🐋 [SMART MONEY] Bloqueando LONG em {symbol}. Baleias VENDENDO pesado (Top: {top_ratio:.2f}, Taker: {taker_ratio:.2f}).")
+                            # Bloqueio Defensivo: Se o Smart Money (Taker + Top Traders + Divergência) for totalmente contra nós
+                            if direction == 'LONG' and sm_dir == 'SHORT' and sm_score >= 20:
+                                log(f"🐋 [SMART MONEY] Bloqueando LONG em {symbol}. Baleias VENDENDO pesado ({sm_metrics.get('summary')}).")
                                 direction = None
-                            elif direction == 'SHORT' and sm_dir == 'LONG':
-                                log(f"🐋 [SMART MONEY] Bloqueando SHORT em {symbol}. Baleias COMPRANDO pesado (Top: {top_ratio:.2f}, Taker: {taker_ratio:.2f}).")
+                            elif direction == 'SHORT' and sm_dir == 'LONG' and sm_score >= 20:
+                                log(f"🐋 [SMART MONEY] Bloqueando SHORT em {symbol}. Baleias COMPRANDO pesado ({sm_metrics.get('summary')}).")
                                 direction = None
-                            elif sm_dir == direction:
-                                log(f"🐋 [SMART MONEY] Confluência ATIVA! Baleias e sistema apontando para {direction}. (Top: {top_ratio:.2f})")
+                            elif sm_dir == direction and sm_score >= 15:
+                                log(f"🐋 [SMART MONEY] Confluência ATIVA (+{sm_score} pts)! {sm_metrics.get('summary')}.")
 
                         # 3. Orderbook Imbalance & Wall Detection em Futuros
                         if direction:

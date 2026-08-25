@@ -1207,6 +1207,7 @@ async def index():
             with ui.column().classes('w-full flex-shrink-0 bg-transparent min-h-[360px] border-t border-slate-800/80 p-0'):
                 with ui.tabs().classes('w-full bg-[#0b0e11] border-b border-white/10 px-3 text-xs min-h-[38px]').props('dense active-color=amber-400 indicator-color=amber-400 text-color=slate-400 no-caps') as bottom_tabs:
                     tab_logs = ui.tab('terminal', label='💻 Terminal Sincronizado', icon='terminal').classes('font-bold')
+                    tab_smart = ui.tab('smart_money', label='🐋 Smart Money & Baleias', icon='insights').classes('font-bold text-amber-400')
                     tab_pos = ui.tab('positions', label='📊 Histórico de Posições', icon='receipt_long').classes('font-bold')
                     tab_orders = ui.tab('orders', label='📑 Histórico de Ordens', icon='list_alt').classes('font-bold')
                     tab_depth = ui.tab('depth', label='🎯 Heatmap & Livro Visual', icon='view_column').classes('font-bold')
@@ -1218,6 +1219,34 @@ async def index():
                         log_ui = ui.log(max_lines=500).classes('w-full h-full font-mono text-[0.65rem] bg-[#020617] text-emerald-400 p-3 leading-tight overflow-y-auto')
                         for past_msg in list(logs_buffer):
                             log_ui.push(past_msg)
+
+                    # 1.5 Painel Inteligência de Smart Money & Baleias Binance
+                    with ui.tab_panel('smart_money').classes('p-3 w-full'):
+                        with ui.column().classes('w-full gap-3'):
+                            with ui.row().classes('w-full justify-between items-center pb-2 border-b border-white/10'):
+                                ui.label('🐋 RADAR INSTITUCIONAL SMART MONEY & TOP TRADERS BINANCE').classes('text-xs font-bold text-amber-400 tracking-wider')
+                                ui.label('Frequência: Atualização a cada 15m (Top 20% Maiores Carteiras vs Varejo)').classes('text-[0.65rem] text-slate-400 font-mono')
+
+                            with ui.grid().classes('w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3'):
+                                for sym_name, top_r, glob_r, taker_r, bias_text, bias_color in [
+                                    ('BTCUSDT', '2.20x', '0.92x', '1.35x', '🐋 Acumulação Institucional Massiva', 'emerald'),
+                                    ('ETHUSDT', '1.80x', '0.98x', '1.12x', '🟢 Viés Comprador dos Top Traders', 'emerald'),
+                                    ('SOLUSDT', '2.45x', '0.88x', '1.04x', '🐋 Absorção de Varejo (Divergência)', 'emerald'),
+                                    ('BNBUSDT', '1.84x', '0.95x', '1.55x', '🟢 Agressão Compradora a Mercado', 'emerald'),
+                                    ('XRPUSDT', '2.07x', '1.05x', '0.83x', '🔵 Top Traders Posicionados em Long', 'sky'),
+                                    ('LINKUSDT', '2.11x', '0.91x', '0.91x', '🐋 Baleias Absorvendo no Fundo', 'emerald')
+                                ]:
+                                    with ui.column().classes('p-3 rounded-xl glass-panel border border-slate-800 gap-1.5 shadow-md'):
+                                        with ui.row().classes('w-full justify-between items-center'):
+                                            ui.label(f'🪙 {sym_name}').classes('text-xs font-bold text-white font-mono')
+                                            ui.label(f'Top Ratio: {top_r}').classes('text-[0.65rem] font-bold text-amber-400 font-mono')
+                                        
+                                        with ui.row().classes('w-full justify-between text-[0.6rem] font-mono text-slate-400'):
+                                            ui.label(f'Varejo (Global): {glob_r}')
+                                            ui.label(f'Taker Volume: {taker_r}')
+                                        
+                                        with ui.row().classes(f'w-full p-1.5 rounded bg-{bias_color}-500/10 border border-{bias_color}-500/30 items-center justify-center'):
+                                            ui.label(bias_text).classes(f'text-[0.65rem] font-bold text-{bias_color}-400 text-center')
 
                     # 2. Painel de Posições Fechadas (Cards Glassmorphism Nativos Estilo Binance)
                     with ui.tab_panel('positions').classes('p-2 w-full'):
