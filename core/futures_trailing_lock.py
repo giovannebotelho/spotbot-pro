@@ -4,7 +4,7 @@ import time
 from core.futures_state import futures_state
 from core.futures_order_manager import get_futures_order_details, robust_cancel_all_orders
 
-async def run_trailing_lock_monitor(client, log=print):
+async def run_trailing_lock_monitor(client, db=None, log=print):
     """
     Monitora posições ativas de futuros a cada 1 segundo.
     Se o preço atingir 80% da meta (TP), engatilha a Trava Trailing.
@@ -170,7 +170,7 @@ async def run_trailing_lock_monitor(client, log=print):
                     is_at_or_below_be = (direction == 'LONG' and cur_price <= entry_price) or (direction == 'SHORT' and cur_price >= entry_price) or (cur_roi <= 0.0)
                     if is_at_or_below_be:
                         log(f"🛡️ [BREAKEVEN-EXEC] {symbol} recuou para o preço de entrada (${cur_price:.4f} <= ${entry_price:.4f} | ROI: {cur_roi:.2f}%). Ejetando os 50% restantes no 0x0!")
-                        await execute_trailing_close(client, symbol, direction, qty, log)
+                        await execute_trailing_close(client, symbol, direction, qty, cur_price, entry_price, db, log)
                         continue
 
                 # FASE 2: Escada de Lucro Blindado (Trailing Step Lock)
@@ -200,7 +200,7 @@ async def run_trailing_lock_monitor(client, log=print):
                 # Se o ROI atual recuou abaixo do piso de lucro já travado, realiza o lucro imediatamente
                 if current_locked_roi > 0 and cur_roi <= current_locked_roi:
                     log(f"💰 [TRAIL-STEP EXEC] {symbol} recuou para o piso travado de +{current_locked_roi:.1f}% ROI (Pico foi +{peak_roi:.1f}%). Realizando lucro!")
-                    await execute_trailing_close(client, symbol, direction, qty, log)
+                    await execute_trailing_close(client, symbol, direction, qty, cur_price, entry_price, db, log)
                     continue
 
                 # FASE 3: Trailing Flexível do Topo (Proteção contra Flash Crash / Reversão Elástica)
@@ -215,19 +215,19 @@ async def run_trailing_lock_monitor(client, log=print):
 
                     if (peak_roi - cur_roi) >= reversal_allowance:
                         log(f"⚡ [TREND-RUNNER EXIT] Recuo expressivo detectado em {symbol} (Pico: +{peak_roi:.2f}%, Atual: +{cur_roi:.2f}%). Ejetando no lucro com segurança!")
-                        await execute_trailing_close(client, symbol, direction, qty, log)
+                        await execute_trailing_close(client, symbol, direction, qty, cur_price, entry_price, db, log)
                         continue
 
                 # FASE 4: Stop Preventivo Rígido Incondicional (Proteção absoluta contra derretimento)
                 if not partial_taken and cur_roi <= adaptive_preventive_sl:
                     log(f"⚡ [STOP PREVENTIVO] {symbol} atingiu tolerância máxima negativa ({cur_roi:.2f}% <= {adaptive_preventive_sl:.1f}%). Fechando antes do SL rígido!")
-                    await execute_trailing_close(client, symbol, direction, qty, log)
+                    await execute_trailing_close(client, symbol, direction, qty, cur_price, entry_price, db, log)
                     continue
                 
                 # FASE 5: Stop de Emergência Hard-Cap Absoluto (-5.5% ROI Max)
                 if cur_roi <= -5.5:
                     log(f"🚨 [STOP EMERGÊNCIA] {symbol} atingiu o limite de corte de emergência ({cur_roi:.2f}% <= -5.5%). Fechando imediatamente!")
-                    await execute_trailing_close(client, symbol, direction, qty, log)
+                    await execute_trailing_close(client, symbol, direction, qty, cur_price, entry_price, db, log)
                     continue
                             
         except Exception as e:
@@ -235,9 +235,10 @@ async def run_trailing_lock_monitor(client, log=print):
             
         await asyncio.sleep(1)
 
-async def execute_trailing_close(client, symbol, direction, qty, log):
+async def execute_trailing_close(client, symbol, direction, qty, exit_price, entry_price, db, log):
     try:
         side_exit = 'SELL' if direction == 'LONG' else 'BUY'
+        from core.futures_order_manager import register_futures_trade
         
         # 1. Cancela TP/SL antigos para evitar órfãs e liberar margem ANTES de fechar
         await robust_cancel_all_orders(client, symbol, log)
@@ -252,8 +253,21 @@ async def execute_trailing_close(client, symbol, direction, qty, log):
             else:
                 log(f"✅ [TRAILING-LOCK] Posição já parece estar fechada.")
                 
-        # 3. Limpa estado na memória para não tentar re-executar
+        # 3. Limpa estado na memória
         await futures_state.remove(symbol)
+        
+        # 4. Busca PnL Realizado exato da Binance e Registra no DB/Telegram
+        realized_pnl = None
+        try:
+            recent_trades = await client.futures_account_trades(symbol=symbol, limit=5)
+            closing_trades = [t for t in recent_trades if float(t.get('realizedPnl', 0)) != 0]
+            if closing_trades:
+                realized_pnl = sum(float(t['realizedPnl']) for t in closing_trades[-2:])
+                exit_price = float(closing_trades[-1]['price'])
+        except Exception as e:
+            log(f"Aviso ao consultar PnL na finalização do Trailing Lock: {e}")
+            
+        await register_futures_trade(client, db, symbol, direction, entry_price, exit_price, qty, log, realized_pnl)
                 
     except Exception as e:
         log(f"❌ Erro crítico no Trailing Lock de {symbol}: {e}")

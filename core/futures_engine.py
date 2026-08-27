@@ -63,7 +63,7 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
     try:
         futures_bg_tasks.append(asyncio.create_task(run_futures_user_stream(client, db, log)))
         futures_bg_tasks.append(asyncio.create_task(run_fallback_position_monitor(client, db, log)))
-        futures_bg_tasks.append(asyncio.create_task(run_trailing_lock_monitor(client, log)))
+        futures_bg_tasks.append(asyncio.create_task(run_trailing_lock_monitor(client, db, log)))
         
         symbols_to_scan = TOP_10_FUTURES_SYMBOLS
     
@@ -679,10 +679,16 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         max_notional = total_balance * 10 # Exp no máximo 10x a banca
                         notional = min(notional_raw, max_notional)
                         
-                        # A alavancagem necessária é apenas para acomodar o Notional
+                        # Buffer de segurança contra Margin Insufficient (-2019)
+                        # Deixa 15% de folga no saldo livre para pagar margem inicial, taxas e ordens condicionais
+                        max_usable_margin = available_balance * 0.85
                         margin_required = notional / leverage
+                        if margin_required > max_usable_margin and max_usable_margin > 1.0:
+                            notional = max_usable_margin * leverage
+                            margin_required = notional / leverage
+
                         if available_balance < margin_required:
-                            log(f"⚠️ Saldo insuficiente para cobrir margem exigida do Risk Sizing. (Req: ${margin_required:.2f})")
+                            log(f"⚠️ Saldo insuficiente para cobrir margem exigida do Risk Sizing. (Req: ${margin_required:.2f}, Disp: ${available_balance:.2f})")
                             break
                     
                         # Dinamicamente buscar a precisão do ativo

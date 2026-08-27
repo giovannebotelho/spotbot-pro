@@ -44,7 +44,7 @@ async def test_breakeven_lock_after_partial():
     is_at_or_below_be = (direction == 'LONG' and cur_price <= entry_price) or (cur_roi <= 0.0)
     assert is_at_or_below_be is True, "Deveria detectar retorno ao Breakeven"
     
-    await ftl.execute_trailing_close(mock_client, symbol, direction, qty, mock_log)
+    await ftl.execute_trailing_close(mock_client, symbol, direction, qty, cur_price, entry_price, None, mock_log)
     
     # Verifica se a ordem a mercado foi enviada
     mock_client.futures_create_order.assert_called_with(
@@ -77,7 +77,7 @@ async def test_emergency_hard_cap_sl():
     assert cur_roi <= -5.5, "ROI deve ser menor que -5.5%"
     
     logs = []
-    await ftl.execute_trailing_close(mock_client, symbol, pos['direction'], pos['qty'], lambda m: logs.append(m))
+    await ftl.execute_trailing_close(mock_client, symbol, pos['direction'], pos['qty'], cur_price, pos['entry'], None, lambda m: logs.append(m))
     
     mock_client.futures_create_order.assert_called_with(
         symbol=symbol, side='SELL', type='MARKET', quantity=0.1, reduceOnly='true'
