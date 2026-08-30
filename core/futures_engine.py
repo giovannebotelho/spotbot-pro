@@ -11,7 +11,7 @@ from core.indicators import (
     calculate_rsi, check_candle_patterns, calculate_macd, calculate_atr,
     calculate_bollinger_bandwidth, calculate_orderbook_imbalance
 )
-from core.futures_order_manager import monitor_futures_lifecycle
+from core.futures_order_manager import monitor_futures_lifecycle, is_symbol_in_cooldown
 from services.telegram_notifier import send_telegram_message
 
 bot_futures_running = False
@@ -242,6 +242,12 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                     if len(active_positions) >= 3:
                         break
                     
+                    # Checagem de Quarentena / Cooldown pós-stop
+                    in_cd, min_left = is_symbol_in_cooldown(symbol)
+                    if in_cd:
+                        log_throttled(f"⏳ [QUARENTENA] {symbol} em cooldown pós-stop por mais {min_left} min. Pulando...", f"cd_{symbol}", log, 600)
+                        continue
+                    
                     status(f"🔍 [FUTUROS] Analisando {symbol}...")
                 
                     try:
@@ -334,10 +340,6 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                             elif dist_upper_bb > 1.0 and has_volume_spike and rsi > 70:
                                 direction = 'SHORT'
                                 trigger_reason = f"📈 [BAND-SNIPER 15M] Fura-Teto violento da Banda Superior ({dist_upper_bb:.2f}%) com RSI extremo ({rsi:.1f})"
-                            else:
-                                if not has_volume_spike:
-                                    log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.", f"smart_relax_{symbol}", log, 7200)
-                                    pass
                     
                     # 2. 15m Bollinger Band Sniper (Reversão à Média Extrema)
                     if not direction:
@@ -369,26 +371,26 @@ async def run_futures_bot(client, bsm, db, log=print, status=print):
                         from core.futures_cvd_reader import evaluate_cvd
                         cvd_delta, buy_ratio, cvd_direction = 0, 0.5, None
                     
-                        # Lazy Evaluation: Só busca o CVD (que consome muito peso da API) se a moeda tiver chance de dar trade (RSI extremo)
-                        if rsi < 38 or rsi > 62:
+                        # Lazy Evaluation: Só busca o CVD se a moeda tiver chance de dar trade (RSI em zona de exaustão)
+                        if rsi < 32 or rsi > 68:
                             cvd_delta, buy_ratio, cvd_direction = await evaluate_cvd(client, symbol)
                     
                         # Exaustão Extrema: Shortar o topo que rompeu a banda superior (independente se verde ou vermelho), ou Long no fundo.
                         if bb_upper and len(bb_upper) > 0 and bb_upper[-1] and cur_price >= bb_upper[-1]:
-                            if rsi > 68:
+                            if rsi > 70:
                                 tech_dir = 'SHORT'
                         elif bb_lower and len(bb_lower) > 0 and bb_lower[-1] and cur_price <= bb_lower[-1]:
-                            if rsi < 32:
+                            if rsi < 30:
                                 tech_dir = 'LONG'
                             
-                        # Smart Relaxation: Se o RSI aponta exaustão e o Tape Reading (CVD) mostra força contrária confirmada
+                        # Smart Relaxation: Só valida com confluência estrita (RSI extremo real + CVD confirmado)
                         if not tech_dir:
-                            if rsi < 38 and cvd_direction == 'LONG':
+                            if rsi < 32 and cvd_direction == 'LONG' and buy_ratio >= 0.65:
                                 tech_dir = 'LONG'
-                                log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD comprador massivo. Validando LONG antecipado em {symbol}.", f"smart_relax_{symbol}", log, 7200)
-                            elif rsi > 62 and cvd_direction == 'SHORT':
+                                log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD comprador confirmado ({buy_ratio*100:.1f}%). Validando LONG em {symbol}.", f"smart_relax_{symbol}", log, 1800)
+                            elif rsi > 68 and cvd_direction == 'SHORT' and buy_ratio <= 0.35:
                                 tech_dir = 'SHORT'
-                                log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor massivo. Validando SHORT antecipado em {symbol}.", f"smart_relax_{symbol}", log, 7200)
+                                log_throttled(f"🧠 [SMART RELAXATION] RSI em {rsi:.1f} com CVD vendedor confirmado ({(1-buy_ratio)*100:.1f}% sells). Validando SHORT em {symbol}.", f"smart_relax_{symbol}", log, 1800)
                             
                         if tech_dir:
                             # Aborta se CVD apontar forte para a direção oposta

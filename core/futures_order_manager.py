@@ -155,6 +155,16 @@ async def close_futures_position(client, symbol, side, qty, tp_order, sl_order, 
             if "ReduceOnly" not in str(e) and "-2022" not in str(e):
                 log(f"⚠️ Erro ao fechar posição a mercado: {e}")
 
+# Dicionário de quarentena de símbolos por Stop/Loss (Cooldown anti-revenge trading)
+symbol_loss_cooldown = {}
+
+def set_symbol_cooldown(symbol, duration_seconds=3600):
+    symbol_loss_cooldown[symbol] = time.time() + duration_seconds
+
+def is_symbol_in_cooldown(symbol):
+    exp = symbol_loss_cooldown.get(symbol, 0)
+    return time.time() < exp, int((exp - time.time()) / 60) if time.time() < exp else 0
+
 async def register_futures_trade(client, db, symbol, direction, entry, exit, qty, log, realized_pnl=None):
     """Registra o trade no DB e avisa no Telegram."""
     if realized_pnl is not None:
@@ -163,6 +173,11 @@ async def register_futures_trade(client, db, symbol, direction, entry, exit, qty
         gross_pnl = (exit - entry) * qty if direction == 'LONG' else (entry - exit) * qty
         
     log(f"📈 Trade Futuros Concluído ({direction}): PnL Bruto = ${gross_pnl:.2f}")
+    
+    # Se o trade foi negativo (Stop Loss / Perda), coloca o símbolo em quarentena por 60 min
+    if gross_pnl < 0:
+        set_symbol_cooldown(symbol, 3600)
+        log(f"🛡️ [ANTI-REVENGE] {symbol} colocado em quarentena por 60 minutos após Stop Loss.")
     
     if TELEGRAM_CONFIG.get('bot_token') and TELEGRAM_CONFIG.get('chat_id'):
         emoji = "🟢" if gross_pnl > 0 else "🔴"

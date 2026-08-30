@@ -218,15 +218,17 @@ async def run_trailing_lock_monitor(client, db=None, log=print):
                         await execute_trailing_close(client, symbol, direction, qty, cur_price, entry_price, db, log)
                         continue
 
-                # FASE 4: Stop Preventivo Rígido Incondicional (Proteção absoluta contra derretimento)
+                # FASE 4: Stop Preventivo Rígido Incondicional (Proteção com respiro técnico baseado em ATR)
+                # Dá respiro de 1.0x ATR para não ser violinado em oscilações normais de mercado
+                adaptive_preventive_sl = -max(6.5, min(9.5, atr_pct * leverage * 100 * 1.0))
                 if not partial_taken and cur_roi <= adaptive_preventive_sl:
                     log(f"⚡ [STOP PREVENTIVO] {symbol} atingiu tolerância máxima negativa ({cur_roi:.2f}% <= {adaptive_preventive_sl:.1f}%). Fechando antes do SL rígido!")
                     await execute_trailing_close(client, symbol, direction, qty, cur_price, entry_price, db, log)
                     continue
                 
-                # FASE 5: Stop de Emergência Hard-Cap Absoluto (-5.5% ROI Max)
-                if cur_roi <= -5.5:
-                    log(f"🚨 [STOP EMERGÊNCIA] {symbol} atingiu o limite de corte de emergência ({cur_roi:.2f}% <= -5.5%). Fechando imediatamente!")
+                # FASE 5: Stop de Emergência Hard-Cap Absoluto (-8.0% ROI Max)
+                if cur_roi <= -8.0:
+                    log(f"🚨 [STOP EMERGÊNCIA] {symbol} atingiu o limite de corte de emergência ({cur_roi:.2f}% <= -8.0%). Fechando imediatamente!")
                     await execute_trailing_close(client, symbol, direction, qty, cur_price, entry_price, db, log)
                     continue
                             
